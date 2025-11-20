@@ -80,7 +80,8 @@ export function get<T>(vec: VectorRoot<T>, index: number): T | undefined {
   }
 
   // Tail optimization: O(1) access to last 32 elements
-  if (index >= tailOffset(vec)) {
+  // Only use tail if it's non-empty (after concat, tail might be empty temporarily)
+  if (vec.tail.length > 0 && index >= tailOffset(vec)) {
     return vec.tail[index - tailOffset(vec)];
   }
 
@@ -529,10 +530,13 @@ export function concat<T>(left: VectorRoot<T>, right: VectorRoot<T>): VectorRoot
   if (left.size === 0) return right;
   if (right.size === 0) return left;
 
-  // For now, use naive approach for all sizes
-  // RRB-Tree concat needs tail extraction logic to be completed
-  // TODO: Enable RRB-Tree concat after fixing tail extraction
-  return concatNaive(left, right);
+  // Small vectors: use naive approach (faster for small n due to lower overhead)
+  if (left.size + right.size < 1000) {
+    return concatNaive(left, right);
+  }
+
+  // Large vectors: use RRB-Tree merge for O(log n) performance
+  return concatRRB(left, right);
 }
 
 /**
@@ -567,50 +571,14 @@ function concatRRB<T>(left: VectorRoot<T>, right: VectorRoot<T>): VectorRoot<T> 
 
   const totalSize = left.size + right.size;
 
-  // Extract tail from merged tree to maintain tail buffer invariant
-  // This ensures O(1) push/pop after concat
-  const tailStart = totalSize < MAX_TAIL_SIZE ? 0 : ((totalSize - 1) >>> BITS) << BITS;
-  const newTail: T[] = [];
-
-  // Extract last ≤32 elements from tree to form tail
-  for (let i = tailStart; i < totalSize; i++) {
-    const value = getFromNode(mergedRoot, i, mergedShift);
-    if (value !== undefined) {
-      newTail.push(value);
-    }
-  }
-
-  // Remove tail elements from tree
-  let newRoot = mergedRoot;
-  let newShift = mergedShift;
-
-  if (newTail.length > 0) {
-    // Pop the tail elements from the tree
-    for (let i = 0; i < newTail.length; i++) {
-      const offset = tailStart - MAX_TAIL_SIZE;
-      if (offset >= 0) {
-        newRoot = popTailFromNode(newRoot, offset, newShift);
-        if (!newRoot) break;
-
-        // Reduce tree height if root has single child
-        if (
-          newRoot &&
-          newRoot.type === 'branch' &&
-          newRoot.array.length === 1 &&
-          newShift > BITS
-        ) {
-          newRoot = newRoot.array[0] ?? null;
-          newShift -= BITS;
-        }
-      }
-    }
-  }
-
+  // Return with empty tail - all elements are in the tree
+  // The tail will be rebuilt naturally during subsequent push operations
+  // get() has been updated to handle empty tails by reading from tree
   return {
-    root: newRoot,
-    tail: newTail,
+    root: mergedRoot,
+    tail: [],
     size: totalSize,
-    shift: newShift,
+    shift: mergedShift,
   };
 }
 
@@ -741,7 +709,17 @@ function mergeNodesAtLevel<T>(
   }
 
   const newLevel = chunks.map(chunk => createBranch(chunk, null));
-  return { root: createBranch(newLevel, null), shift: shift + BITS };
+
+  // When merging trees, always create RELAXED root with size tables
+  // This is needed because merged children may not align on power-of-32 boundaries
+  const sizes: number[] = [];
+  let total = 0;
+  for (const child of newLevel) {
+    total += nodeSize(child);
+    sizes.push(total);
+  }
+
+  return { root: createBranch(newLevel, sizes), shift: shift + BITS };
 }
 
 /**
