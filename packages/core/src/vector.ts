@@ -529,13 +529,10 @@ export function concat<T>(left: VectorRoot<T>, right: VectorRoot<T>): VectorRoot
   if (left.size === 0) return right;
   if (right.size === 0) return left;
 
-  // Small vectors: use naive approach
-  if (left.size + right.size < 10000) {
-    return concatNaive(left, right);
-  }
-
-  // Large vectors: use RRB-Tree merge
-  return concatRRB(left, right);
+  // For now, use naive approach for all sizes
+  // RRB-Tree concat needs tail extraction logic to be completed
+  // TODO: Enable RRB-Tree concat after fixing tail extraction
+  return concatNaive(left, right);
 }
 
 /**
@@ -570,13 +567,50 @@ function concatRRB<T>(left: VectorRoot<T>, right: VectorRoot<T>): VectorRoot<T> 
 
   const totalSize = left.size + right.size;
 
-  // Return with empty tail - tail buffer will be rebuilt during subsequent operations
-  // This avoids complex tail extraction logic and ensures correctness
+  // Extract tail from merged tree to maintain tail buffer invariant
+  // This ensures O(1) push/pop after concat
+  const tailStart = totalSize < MAX_TAIL_SIZE ? 0 : ((totalSize - 1) >>> BITS) << BITS;
+  const newTail: T[] = [];
+
+  // Extract last ≤32 elements from tree to form tail
+  for (let i = tailStart; i < totalSize; i++) {
+    const value = getFromNode(mergedRoot, i, mergedShift);
+    if (value !== undefined) {
+      newTail.push(value);
+    }
+  }
+
+  // Remove tail elements from tree
+  let newRoot = mergedRoot;
+  let newShift = mergedShift;
+
+  if (newTail.length > 0) {
+    // Pop the tail elements from the tree
+    for (let i = 0; i < newTail.length; i++) {
+      const offset = tailStart - MAX_TAIL_SIZE;
+      if (offset >= 0) {
+        newRoot = popTailFromNode(newRoot, offset, newShift);
+        if (!newRoot) break;
+
+        // Reduce tree height if root has single child
+        if (
+          newRoot &&
+          newRoot.type === 'branch' &&
+          newRoot.array.length === 1 &&
+          newShift > BITS
+        ) {
+          newRoot = newRoot.array[0] ?? null;
+          newShift -= BITS;
+        }
+      }
+    }
+  }
+
   return {
-    root: mergedRoot,
-    tail: [],
+    root: newRoot,
+    tail: newTail,
     size: totalSize,
-    shift: mergedShift,
+    shift: newShift,
   };
 }
 
