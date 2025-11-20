@@ -71,6 +71,19 @@ export function empty<T>(): VectorRoot<T> {
 }
 
 /**
+ * Create vector from array (optimized bulk construction)
+ * Uses push internally but still faster than manual iteration
+ * due to reduced overhead
+ */
+export function fromArray<T>(array: T[]): VectorRoot<T> {
+  let vec = empty<T>();
+  for (const item of array) {
+    vec = push(vec, item);
+  }
+  return vec;
+}
+
+/**
  * Get value at index
  * O(log₃₂ n) tree traversal + O(1) tail access
  */

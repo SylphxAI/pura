@@ -29,22 +29,45 @@ export class IList<T = any> implements IListInterface<T> {
    * Create a list from values
    */
   static of<T>(...items: T[]): IList<T> {
-    let root = Vector.empty<T>();
-    for (const item of items) {
-      root = Vector.push(root, item);
-    }
-    return new IList<T>(root);
+    return IList.fromArray(items);
   }
 
   /**
    * Create a list from an iterable
    */
   static from<T>(items: Iterable<T>): IList<T> {
-    let root = Vector.empty<T>();
-    for (const item of items) {
-      root = Vector.push(root, item);
+    // Fast path for arrays
+    if (Array.isArray(items)) {
+      return IList.fromArray(items);
     }
+
+    // For other iterables, collect to array first (much faster than incremental push)
+    const array = Array.from(items);
+    return IList.fromArray(array);
+  }
+
+  /**
+   * Create a list from native array (optimized path)
+   * @internal
+   */
+  private static fromArray<T>(items: T[]): IList<T> {
+    const root = Vector.fromArray(items);
     return new IList<T>(root);
+  }
+
+  /**
+   * Create a mutable builder for efficient batch operations
+   *
+   * Builder uses native JavaScript array internally for maximum performance,
+   * then converts to persistent structure once.
+   *
+   * @example
+   * const list = IList.builder<number>()
+   *   .push(1).push(2).push(3)
+   *   .build();
+   */
+  static builder<T>(): IListBuilder<T> {
+    return new IListBuilder<T>();
   }
 
   /**
@@ -308,5 +331,71 @@ export class IList<T = any> implements IListInterface<T> {
   sort(compareFn?: (a: T, b: T) => number): IList<T> {
     const sorted = this.toArray().sort(compareFn);
     return IList.from(sorted);
+  }
+}
+
+/**
+ * Mutable builder for efficient batch list construction
+ *
+ * Uses native JavaScript array internally for maximum performance,
+ * then converts to persistent IList once at the end.
+ *
+ * @example
+ * const list = IList.builder<number>()
+ *   .push(1)
+ *   .push(2)
+ *   .push(3)
+ *   .build();
+ *
+ * // Much faster than:
+ * let list = IList.empty<number>();
+ * list = list.push(1);
+ * list = list.push(2);
+ * list = list.push(3);
+ */
+export class IListBuilder<T> {
+  private array: T[] = [];
+
+  /**
+   * Push value to end
+   */
+  push(value: T): this {
+    this.array.push(value);
+    return this;
+  }
+
+  /**
+   * Push multiple values
+   */
+  pushAll(values: Iterable<T>): this {
+    for (const value of values) {
+      this.array.push(value);
+    }
+    return this;
+  }
+
+  /**
+   * Set value at index
+   */
+  set(index: number, value: T): this {
+    if (index < 0 || index >= this.array.length) {
+      throw new RangeError(`Index out of bounds: ${index}`);
+    }
+    this.array[index] = value;
+    return this;
+  }
+
+  /**
+   * Get current size
+   */
+  get size(): number {
+    return this.array.length;
+  }
+
+  /**
+   * Build final immutable list
+   */
+  build(): IList<T> {
+    return IList.from(this.array);
   }
 }

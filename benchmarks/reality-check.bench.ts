@@ -118,6 +118,14 @@ describe('Reality Check: List Build-up (creating 1000-element list)', () => {
     }
   });
 
+  bench('IList Builder - build with Builder API', () => {
+    const builder = IList.builder<number>();
+    for (let i = 0; i < 1000; i++) {
+      builder.push(i);
+    }
+    builder.build();
+  });
+
   bench('Array (naive FP) - build by spreading 1000 times', () => {
     let arr: number[] = [];
     for (let i = 0; i < 1000; i++) {
@@ -231,6 +239,14 @@ describe('Reality Check: Map Build-up (creating 1000-entry map)', () => {
     for (let i = 0; i < 1000; i++) {
       map = map.set(`key${i}`, i);
     }
+  });
+
+  bench('IMap Builder - build with Builder API', () => {
+    const builder = IMap.builder<string, number>();
+    for (let i = 0; i < 1000; i++) {
+      builder.set(`key${i}`, i);
+    }
+    builder.build();
   });
 
   bench('Map (naive FP) - build by cloning 1000 times', () => {

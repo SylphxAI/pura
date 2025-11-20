@@ -54,6 +54,21 @@ export class IMap<K = any, V = any> implements IMapInterface<K, V> {
   }
 
   /**
+   * Create a mutable builder for efficient batch operations
+   *
+   * Builder uses native JavaScript Map internally for maximum performance,
+   * then converts to persistent structure once.
+   *
+   * @example
+   * const map = IMap.builder<string, number>()
+   *   .set('a', 1).set('b', 2).set('c', 3)
+   *   .build();
+   */
+  static builder<K, V>(): IMapBuilder<K, V> {
+    return new IMapBuilder<K, V>();
+  }
+
+  /**
    * Get value by key
    * O(log₃₂ n) ≈ O(1)
    */
@@ -83,11 +98,6 @@ export class IMap<K = any, V = any> implements IMapInterface<K, V> {
     }
 
     const newRoot = HAMT.set(this.root, key, value, keyHash);
-
-    // Structural sharing: if root unchanged, return same map
-    if (newRoot === this.root) {
-      return this;
-    }
 
     // Calculate new size
     const newSize = oldValue === undefined ? this.size + 1 : this.size;
@@ -226,5 +236,68 @@ export class IMap<K = any, V = any> implements IMapInterface<K, V> {
     }
 
     return true;
+  }
+}
+
+/**
+ * Mutable builder for efficient batch map construction
+ *
+ * Uses native JavaScript Map internally for maximum performance,
+ * then converts to persistent IMap once at the end.
+ *
+ * @example
+ * const map = IMap.builder<string, number>()
+ *   .set('a', 1)
+ *   .set('b', 2)
+ *   .set('c', 3)
+ *   .build();
+ *
+ * // Much faster than:
+ * let map = IMap.empty<string, number>();
+ * map = map.set('a', 1);
+ * map = map.set('b', 2);
+ * map = map.set('c', 3);
+ */
+export class IMapBuilder<K, V> {
+  private map: Map<K, V> = new Map();
+
+  /**
+   * Set value for key
+   */
+  set(key: K, value: V): this {
+    this.map.set(key, value);
+    return this;
+  }
+
+  /**
+   * Set multiple entries
+   */
+  setAll(entries: Iterable<[K, V]>): this {
+    for (const [key, value] of entries) {
+      this.map.set(key, value);
+    }
+    return this;
+  }
+
+  /**
+   * Delete key
+   */
+  delete(key: K): this {
+    this.map.delete(key);
+    return this;
+  }
+
+  /**
+   * Get current size
+   */
+  get size(): number {
+    return this.map.size;
+  }
+
+  /**
+   * Build final immutable map
+   */
+  build(): IMap<K, V> {
+    return IMap.from(this.map);
   }
 }
