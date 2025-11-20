@@ -1,0 +1,39 @@
+{
+  "name": "pura",
+  "version": "0.1.0",
+  "description": "Pure FP for TypeScript - Fast, Type-Safe, Zero Compromise",
+  "type": "module",
+  "author": "SylphX Ltd",
+  "license": "MIT",
+  "keywords": [
+    "functional",
+    "immutable",
+    "persistent",
+    "pure-fp",
+    "typescript",
+    "hamt",
+    "rrb-tree",
+    "data-structures"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sylphxltd/pura.git"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "vitest bench",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^2.1.9",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  }
+}
