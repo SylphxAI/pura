@@ -1090,6 +1090,21 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
           };
 
         case 'slice':
+          return (start?: number, end?: number) => {
+            const len = state.vec.count;
+            // Normalize indices like Array.prototype.slice
+            let s = start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+            let e = end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
+            if (s >= e) return [];
+            const resultLen = e - s;
+            const result = new Array(resultLen);
+            // Use vecGet directly for random access (O(log32 n) per access)
+            for (let i = 0; i < resultLen; i++) {
+              result[i] = vecGet(state.vec, s + i);
+            }
+            return result;
+          };
+
         case 'concat':
         case 'join':
           return (...args: any[]) => {
