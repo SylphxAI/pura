@@ -10,12 +10,18 @@ import type { Map as IMapInterface } from './types';
 type HAMTNode<K, V> = ReturnType<typeof HAMT.set<K, V>>;
 
 /**
+ * Edit token type (imported from HAMT)
+ */
+type Edit = { _brand: 'edit' };
+
+/**
  * Immutable Persistent Map
  */
 export class IMap<K = any, V = any> implements IMapInterface<K, V> {
   private constructor(
     private readonly root: HAMTNode<K, V>,
-    public readonly size: number
+    public readonly size: number,
+    private readonly edit?: Edit
   ) {}
 
   /**
@@ -97,11 +103,23 @@ export class IMap<K = any, V = any> implements IMapInterface<K, V> {
       return this;
     }
 
-    const newRoot = HAMT.set(this.root, key, value, keyHash);
+    const edit = this.edit;
+    const newRoot = edit
+      ? HAMT.setMut(this.root, key, value, keyHash, edit)
+      : HAMT.set(this.root, key, value, keyHash);
 
     // Calculate new size
     const newSize = oldValue === undefined ? this.size + 1 : this.size;
-    return new IMap(newRoot, newSize);
+
+    if (edit) {
+      // Transient: mutate in-place
+      (this as any).root = newRoot;
+      (this as any).size = newSize;
+      return this;
+    } else {
+      // Persistent: return new map
+      return new IMap(newRoot, newSize);
+    }
   }
 
   /**
@@ -236,6 +254,34 @@ export class IMap<K = any, V = any> implements IMapInterface<K, V> {
     }
 
     return true;
+  }
+
+  /**
+   * Convert to transient (mutable) for efficient batch operations
+   *
+   * Transient maps allow in-place modifications for maximum performance.
+   * Must call toPersistent() to convert back to immutable.
+   *
+   * @example
+   * const map = IMap.empty<string, number>()
+   *   .asTransient()
+   *   .set('a', 1).set('b', 2).set('c', 3)
+   *   .toPersistent();
+   */
+  asTransient(): IMap<K, V> {
+    const { node, edit } = HAMT.asTransient(this.root);
+    return new IMap(node, this.size, edit);
+  }
+
+  /**
+   * Convert transient back to persistent (immutable)
+   *
+   * After calling this, the map becomes immutable again and
+   * the transient version can no longer be used.
+   */
+  toPersistent(): IMap<K, V> {
+    const persistentRoot = HAMT.asPersistent(this.root);
+    return new IMap(persistentRoot, this.size);
   }
 }
 

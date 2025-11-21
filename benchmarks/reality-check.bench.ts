@@ -221,6 +221,14 @@ describe('Reality Check: Map Operations (1000 entries)', () => {
     }
   });
 
+  bench('IMap Transient - 10 sequential sets', () => {
+    let map = imap.asTransient();
+    for (let i = 0; i < 10; i++) {
+      map = map.set(`key${i * 100}`, 999);
+    }
+    map.toPersistent();
+  });
+
   bench('Map (naive FP) - 10 sequential sets (10 full clones!)', () => {
     let map = mutableMap;
     for (let i = 0; i < 10; i++) {
@@ -255,6 +263,14 @@ describe('Reality Check: Map Build-up (creating 1000-entry map)', () => {
     for (let i = 0; i < 1000; i++) {
       map = map.set(`key${i}`, i);
     }
+  });
+
+  bench('IMap Transient - build with Transient API', () => {
+    let map = IMap.empty<string, number>().asTransient();
+    for (let i = 0; i < 1000; i++) {
+      map = map.set(`key${i}`, i);
+    }
+    map.toPersistent();
   });
 
   bench('IMap Builder - build with Builder API', () => {

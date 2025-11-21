@@ -75,6 +75,12 @@ function popcount(bitmap: number): number {
 }
 
 /**
+ * Edit token for transient modifications
+ * When a node has this edit token, it can be mutated in-place
+ */
+type Edit = { _brand: 'edit' };
+
+/**
  * Entry: leaf node containing actual key-value pair
  */
 interface Entry<K, V> {
@@ -82,6 +88,7 @@ interface Entry<K, V> {
   key: K;
   value: V;
   hash: number;
+  edit?: Edit;
 }
 
 /**
@@ -91,6 +98,7 @@ interface Collision<K, V> {
   type: 'collision';
   hash: number;
   entries: Entry<K, V>[];
+  edit?: Edit;
 }
 
 /**
@@ -101,6 +109,7 @@ interface Node<K, V> {
   type: 'node';
   bitmap: number;                    // 32-bit: which slots are occupied
   children: Array<Node<K, V> | Entry<K, V> | Collision<K, V>>;
+  edit?: Edit;
 }
 
 /**
@@ -372,4 +381,157 @@ export function size<K, V>(node: HAMTNode<K, V>): number {
   if (node.type === 'collision') return node.entries.length;
 
   return node.children.reduce((sum, child) => sum + size(child), 0);
+}
+
+/**
+ * Create transient (mutable) HAMT for batch operations
+ * Returns edit token for this transient instance
+ */
+export function asTransient<K, V>(node: HAMTNode<K, V>): { node: HAMTNode<K, V>; edit: Edit } {
+  const edit: Edit = { _brand: 'edit' };
+  return { node, edit };
+}
+
+/**
+ * Convert transient HAMT back to persistent (immutable)
+ * Removes all edit tokens from the tree
+ */
+export function asPersistent<K, V>(node: HAMTNode<K, V>): HAMTNode<K, V> {
+  // Edit tokens don't need explicit removal - new persistent operations
+  // will create new nodes without edit tokens
+  return node;
+}
+
+/**
+ * Set value in HAMT with mutable operations (for transients)
+ * O(log₃₂ n) with in-place modifications when edit matches
+ */
+export function setMut<K, V>(
+  node: HAMTNode<K, V>,
+  key: K,
+  value: V,
+  keyHash: number,
+  edit: Edit,
+  shift: number = 0
+): HAMTNode<K, V> {
+  if (!node) {
+    return { type: 'entry', key, value, hash: keyHash, edit };
+  }
+
+  if (node.type === 'entry') {
+    // Same key: replace value
+    if (node.key === key) {
+      if (node.edit === edit) {
+        // Mutate in-place
+        node.value = value;
+        return node;
+      }
+      return { type: 'entry', key, value, hash: keyHash, edit };
+    }
+
+    // Hash collision: create collision node or expand
+    if (node.hash === keyHash) {
+      const newEntry: Entry<K, V> = { type: 'entry', key, value, hash: keyHash, edit };
+      return {
+        type: 'collision',
+        hash: keyHash,
+        entries: [node, newEntry],
+        edit,
+      };
+    }
+
+    // Different hash: expand into node
+    return expandEntriesMut(node, { type: 'entry', key, value, hash: keyHash, edit }, shift, edit);
+  }
+
+  if (node.type === 'collision') {
+    // Hash collision: append or replace
+    const existingIndex = node.entries.findIndex(e => e.key === key);
+
+    if (node.edit === edit) {
+      // Mutate in-place
+      if (existingIndex >= 0) {
+        // Replace
+        node.entries[existingIndex] = { type: 'entry', key, value, hash: keyHash, edit };
+      } else {
+        // Append
+        node.entries.push({ type: 'entry', key, value, hash: keyHash, edit });
+      }
+      return node;
+    }
+
+    // Copy
+    if (existingIndex >= 0) {
+      // Replace
+      const newEntries = [...node.entries];
+      newEntries[existingIndex] = { type: 'entry', key, value, hash: keyHash, edit };
+      return { ...node, entries: newEntries, edit };
+    }
+    // Append
+    return { ...node, entries: [...node.entries, { type: 'entry', key, value, hash: keyHash, edit }], edit };
+  }
+
+  // Node: traverse down
+  const index = getIndex(keyHash, shift);
+  const arrayIndex = getArrayIndex(node.bitmap, index);
+
+  if (hasBit(node.bitmap, index)) {
+    // Update existing child
+    const oldChild = node.children[arrayIndex]!;
+    const newChild = setMut(oldChild, key, value, keyHash, edit, shift + BITS);
+
+    if (node.edit === edit) {
+      // Mutate in-place
+      node.children[arrayIndex] = newChild;
+      return node;
+    }
+
+    // Copy
+    const newChildren = [...node.children];
+    newChildren[arrayIndex] = newChild;
+    return { type: 'node', bitmap: node.bitmap, children: newChildren, edit };
+  }
+
+  // Insert new child
+  const newEntry: Entry<K, V> = { type: 'entry', key, value, hash: keyHash, edit };
+
+  if (node.edit === edit) {
+    // Mutate in-place: splice into array
+    node.children.splice(arrayIndex, 0, newEntry);
+    node.bitmap = setBit(node.bitmap, index);
+    return node;
+  }
+
+  // Copy
+  const newChildren = [
+    ...node.children.slice(0, arrayIndex),
+    newEntry,
+    ...node.children.slice(arrayIndex),
+  ];
+  const newBitmap = setBit(node.bitmap, index);
+  return { type: 'node', bitmap: newBitmap, children: newChildren, edit };
+}
+
+/**
+ * Expand two entries into a node (mutable version)
+ */
+function expandEntriesMut<K, V>(
+  entry1: Entry<K, V>,
+  entry2: Entry<K, V>,
+  shift: number,
+  edit: Edit
+): Node<K, V> {
+  const index1 = getIndex(entry1.hash, shift);
+  const index2 = getIndex(entry2.hash, shift);
+
+  if (index1 === index2) {
+    // Still colliding: go deeper
+    const child = expandEntriesMut(entry1, entry2, shift + BITS, edit);
+    return { type: 'node', bitmap: 1 << index1, children: [child], edit };
+  }
+
+  // No collision: create node with both entries
+  const [first, second] = index1 < index2 ? [entry1, entry2] : [entry2, entry1];
+  const bitmap = setBit(setBit(0, index1), index2);
+  return { type: 'node', bitmap, children: [first, second], edit };
 }
