@@ -1054,6 +1054,24 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return vecGetCached(state, idx);
           };
 
+        case 'keys':
+          return function* () {
+            for (let i = 0; i < state.vec.count; i++) yield i;
+          };
+
+        case 'values':
+          return function* () {
+            yield* vecIter(state.vec);
+          };
+
+        case 'entries':
+          return function* () {
+            let i = 0;
+            for (const v of vecIter(state.vec)) {
+              yield [i++, v] as [number, T];
+            }
+          };
+
         case 'slice':
         case 'concat':
         case 'join':
