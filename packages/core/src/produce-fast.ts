@@ -548,7 +548,107 @@ function applyMutationTree<T>(base: T, tree: MutationTreeNode): T {
 }
 
 /**
- * Optimized batch application of mutations
+ * Direct construction approach - build result without intermediate tree
+ * Optimized for small-to-medium mutation counts (2-20)
+ */
+function applyDirectConstruction<T extends object>(
+  base: T,
+  mutations: ObjectMutation[]
+): T {
+  // Group mutations by first key in path
+  const groups = new Map<string | number, ObjectMutation[]>();
+  const rootChanges: Record<string | number, any> = {};
+  const rootDeletes = new Set<string | number>();
+
+  for (const mutation of mutations) {
+    const key = mutation.path[0];
+
+    if (mutation.path.length === 1) {
+      // Shallow mutation - apply directly at root
+      switch (mutation.type) {
+        case 'set':
+          rootChanges[key] = mutation.value;
+          rootDeletes.delete(key);
+          break;
+        case 'update':
+          rootChanges[key] = mutation.updater((base as any)[key]);
+          rootDeletes.delete(key);
+          break;
+        case 'delete':
+          rootDeletes.add(key);
+          delete rootChanges[key];
+          break;
+        case 'merge':
+          rootChanges[key] = { ...(base as any)[key], ...mutation.value };
+          rootDeletes.delete(key);
+          break;
+      }
+    } else {
+      // Deep mutation - group by first key
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      // Create new mutation with path shifted by 1
+      const shiftedMutation: ObjectMutation = {
+        ...mutation,
+        path: mutation.path.slice(1)
+      };
+      groups.get(key)!.push(shiftedMutation);
+    }
+  }
+
+  // Apply grouped deep mutations recursively
+  for (const [key, group] of groups) {
+    if (rootDeletes.has(key)) continue; // Skip if deleted
+
+    const baseValue = (base as any)[key];
+    const newValue = applyDirectConstruction(baseValue, group);
+
+    if (newValue !== baseValue) {
+      rootChanges[key] = newValue;
+    }
+  }
+
+  // Build result
+  if (rootDeletes.size === 0) {
+    // No deletes - simple spread
+    return { ...base, ...rootChanges } as T;
+  }
+
+  // Has deletes - filter keys
+  const result: any = {};
+  for (const key in base) {
+    if (!rootDeletes.has(key)) {
+      result[key] = key in rootChanges ? rootChanges[key] : (base as any)[key];
+    }
+  }
+  for (const key in rootChanges) {
+    if (!(key in base)) {
+      result[key] = rootChanges[key];
+    }
+  }
+
+  return result as T;
+}
+
+/**
+ * Helper to get value from mutation (handles set/update/merge)
+ */
+function getMutationValue(mutation: ObjectMutation, base: any): any {
+  switch (mutation.type) {
+    case 'set':
+      return mutation.value;
+    case 'update':
+      return mutation.updater((base as any)[mutation.path[0]]);
+    case 'merge':
+      return { ...(base as any)[mutation.path[0]], ...mutation.value };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Optimized batch application of mutations with pattern-based specialization
  */
 function applyMutationsBatch<T extends object>(
   base: T,
@@ -556,7 +656,7 @@ function applyMutationsBatch<T extends object>(
 ): T {
   if (mutations.length === 0) return base;
 
-  // Fast path: single mutation
+  // ===== Pattern 1: Single Mutation (Most Common) =====
   if (mutations.length === 1) {
     const mutation = mutations[0];
     switch (mutation.type) {
@@ -577,79 +677,148 @@ function applyMutationsBatch<T extends object>(
     }
   }
 
-  // Check if all mutations are shallow (path length 1)
-  const allShallow = mutations.every(m => m.path.length === 1);
+  // ===== Pattern 2: 2 Shallow Mutations (Very Common) =====
+  if (mutations.length === 2) {
+    const [m1, m2] = mutations;
 
-  if (allShallow) {
-    // Check if there are any deletes
-    const hasDeletes = mutations.some(m => m.type === 'delete');
+    // Check: both shallow, no deletes
+    if (
+      m1.path.length === 1 &&
+      m2.path.length === 1 &&
+      m1.type !== 'delete' &&
+      m2.type !== 'delete'
+    ) {
+      // Inline: single spread with both changes
+      return {
+        ...base,
+        [m1.path[0]]: getMutationValue(m1, base),
+        [m2.path[0]]: getMutationValue(m2, base)
+      } as T;
+    }
+  }
 
-    if (!hasDeletes) {
-      // No deletes - can use simple spread
+  // ===== Pattern 3: 3-6 All Shallow Mutations =====
+  if (mutations.length <= 6) {
+    const allShallow = mutations.every(m => m.path.length === 1);
+    const noDeletes = mutations.every(m => m.type !== 'delete');
+
+    if (allShallow && noDeletes) {
+      // Build changes object inline
       const changes: Record<string | number, any> = {};
 
       for (const mutation of mutations) {
         const key = mutation.path[0];
-        switch (mutation.type) {
-          case 'set':
-            changes[key] = mutation.value;
-            break;
-          case 'update':
-            changes[key] = mutation.updater((base as any)[key]);
-            break;
-          case 'merge':
-            changes[key] = { ...(base as any)[key], ...mutation.value };
-            break;
-        }
+        changes[key] = getMutationValue(mutation, base);
       }
 
       // Single spread operation
       return { ...base, ...changes } as T;
     }
-
-    // Has deletes - need to filter
-    const changes: Record<string | number, any> = {};
-    const deletes = new Set<string | number>();
-
-    for (const mutation of mutations) {
-      const key = mutation.path[0];
-      switch (mutation.type) {
-        case 'set':
-          changes[key] = mutation.value;
-          deletes.delete(key);
-          break;
-        case 'update':
-          changes[key] = mutation.updater((base as any)[key]);
-          deletes.delete(key);
-          break;
-        case 'delete':
-          deletes.add(key);
-          delete changes[key];
-          break;
-        case 'merge':
-          changes[key] = { ...(base as any)[key], ...mutation.value };
-          deletes.delete(key);
-          break;
-      }
-    }
-
-    // Apply all changes in one pass
-    const result: any = {};
-    for (const key in base) {
-      if (!deletes.has(key)) {
-        result[key] = key in changes ? changes[key] : (base as any)[key];
-      }
-    }
-    for (const key in changes) {
-      if (!(key in base)) {
-        result[key] = changes[key];
-      }
-    }
-
-    return result as T;
   }
 
-  // Deep mutations - use mutation tree for optimal performance
+  // ===== Pattern 4: All Same Depth-2 Parent =====
+  // Example: $.set(['profile', 'bio'], ...); $.set(['profile', 'avatar'], ...)
+  if (mutations.length <= 10) {
+    const allDepth2 = mutations.every(m => m.path.length === 2);
+
+    if (allDepth2) {
+      const firstParent = mutations[0].path[0];
+      const sameParent = mutations.every(m => m.path[0] === firstParent);
+      const noDeletes = mutations.every(m => m.type !== 'delete');
+
+      if (sameParent && noDeletes) {
+        // All mutations under same parent - optimize
+        const parentValue = (base as any)[firstParent];
+        const changes: Record<string | number, any> = {};
+
+        for (const mutation of mutations) {
+          const childKey = mutation.path[1];
+
+          switch (mutation.type) {
+            case 'set':
+              changes[childKey] = mutation.value;
+              break;
+            case 'update':
+              changes[childKey] = mutation.updater(parentValue[childKey]);
+              break;
+            case 'merge':
+              changes[childKey] = { ...parentValue[childKey], ...mutation.value };
+              break;
+          }
+        }
+
+        // Single nested spread
+        return {
+          ...base,
+          [firstParent]: {
+            ...parentValue,
+            ...changes
+          }
+        } as T;
+      }
+    }
+  }
+
+  // ===== Pattern 5: Mixed Shallow + Nested (Common in Real Usage) =====
+  // Example: $.set(['name'], ...); $.set(['age'], ...); $.set(['profile', 'bio'], ...)
+  // Also handles: $.set(['profile', 'settings', 'theme'], ...) with recursion
+  if (mutations.length <= 8) {
+    const noDeletes = mutations.every(m => m.type !== 'delete');
+
+    if (noDeletes) {
+      // Separate shallow and deep mutations
+      const shallow: ObjectMutation[] = [];
+      const deepByParent = new Map<string | number, ObjectMutation[]>();
+
+      for (const mutation of mutations) {
+        if (mutation.path.length === 1) {
+          shallow.push(mutation);
+        } else {
+          const parent = mutation.path[0];
+          if (!deepByParent.has(parent)) {
+            deepByParent.set(parent, []);
+          }
+          deepByParent.get(parent)!.push(mutation);
+        }
+      }
+
+      // If we have grouped deep mutations by parent (max 2 parents)
+      if (deepByParent.size <= 2 && deepByParent.size > 0) {
+        // Optimize: handle shallow directly, nested by parent
+        const result: any = { ...base };
+
+        // Apply shallow mutations inline
+        for (const mutation of shallow) {
+          result[mutation.path[0]] = getMutationValue(mutation, base);
+        }
+
+        // Apply deep mutations recursively by parent
+        for (const [parent, muts] of deepByParent) {
+          const parentValue = (base as any)[parent];
+
+          // Recursively apply nested mutations by shifting paths
+          const shiftedMuts: ObjectMutation[] = muts.map(m => ({
+            ...m,
+            path: m.path.slice(1)
+          }));
+
+          // Recursively apply (will hit Pattern 2/3/4 for simple cases)
+          result[parent] = applyMutationsBatch(parentValue, shiftedMuts);
+        }
+
+        return result as T;
+      }
+    }
+  }
+
+  // ===== General Cases =====
+
+  // Medium batch (4-20 mutations): use direct construction
+  if (mutations.length <= 20) {
+    return applyDirectConstruction(base, mutations);
+  }
+
+  // Large batch (20+ mutations): use mutation tree
   const tree = buildMutationTree(base, mutations);
   return applyMutationTree(base, tree);
 }
