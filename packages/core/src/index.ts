@@ -1319,12 +1319,46 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
+        case 'fill':
+          return (value: T, start?: number, end?: number) => {
+            const len = state.vec.count;
+            const s = start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+            const e = end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
+            // In draft mode, use vecAssoc for each position
+            for (let i = s; i < e; i++) {
+              state.vec = vecAssoc(state.vec, state.owner, i, value);
+            }
+            if (s < e) {
+              state.modified = true;
+              state.cachedLeaf = undefined;
+            }
+            return proxy;
+          };
+
+        case 'copyWithin':
+          return (target: number, start?: number, end?: number) => {
+            const len = state.vec.count;
+            let t = target < 0 ? Math.max(len + target, 0) : Math.min(target, len);
+            const s = start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+            const e = end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
+            const count = Math.min(e - s, len - t);
+            // Copy elements using vecGet and vecAssoc
+            for (let i = 0; i < count; i++) {
+              const v = vecGet(state.vec, s + i);
+              state.vec = vecAssoc(state.vec, state.owner, t + i, v as T);
+            }
+            if (count > 0) {
+              state.modified = true;
+              state.cachedLeaf = undefined;
+            }
+            return proxy;
+          };
+
         case 'splice':
         case 'sort':
         case 'reverse':
         case 'shift':
         case 'unshift':
-        case 'fill':
           return (...args: any[]) => {
             // eslint-disable-next-line no-console
             console.warn(`Pura: De-optimizing for ${String(prop)}`);
