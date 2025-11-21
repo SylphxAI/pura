@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { pura, produce, unpura } from './index';
+import { pura, produce, unpura, isPura, repura } from './index';
 
 // ===== Core Design: Dual-Mode Arrays =====
 describe('Core Design: Dual-Mode (Mutable + Immutable)', () => {
@@ -847,5 +847,314 @@ describe('Real-World Scenarios', () => {
 
     expect(errors).toEqual(['Email required']);
     expect(fields[0]).toEqual({ name: 'John', email: '', age: 0 });
+  });
+});
+
+// ===== Trie Boundary Tests (BRANCH_FACTOR = 32) =====
+describe('Trie Boundary Tests', () => {
+  const BRANCH_FACTOR = 32;
+
+  describe('Push across tail boundaries', () => {
+    it('Push exactly BRANCH_FACTOR items', () => {
+      const arr = pura<number>([]);
+      for (let i = 0; i < BRANCH_FACTOR; i++) {
+        arr.push(i);
+      }
+      expect(arr.length).toBe(BRANCH_FACTOR);
+      expect(arr[0]).toBe(0);
+      expect(arr[BRANCH_FACTOR - 1]).toBe(BRANCH_FACTOR - 1);
+    });
+
+    it('Push BRANCH_FACTOR + 1 items (tail overflow)', () => {
+      const arr = pura<number>([]);
+      for (let i = 0; i <= BRANCH_FACTOR; i++) {
+        arr.push(i);
+      }
+      expect(arr.length).toBe(BRANCH_FACTOR + 1);
+      expect(arr[BRANCH_FACTOR]).toBe(BRANCH_FACTOR);
+    });
+
+    it('Push 1024 items (shift upgrade from 5 to 10)', () => {
+      const arr = pura<number>([]);
+      for (let i = 0; i < 1024; i++) {
+        arr.push(i);
+      }
+      expect(arr.length).toBe(1024);
+      expect(arr[0]).toBe(0);
+      expect(arr[1023]).toBe(1023);
+    });
+
+    it('Push 1025 items (after shift upgrade)', () => {
+      const arr = pura<number>([]);
+      for (let i = 0; i < 1025; i++) {
+        arr.push(i);
+      }
+      expect(arr.length).toBe(1025);
+      expect(arr[1024]).toBe(1024);
+      // Verify all indices are accessible
+      for (let i = 0; i < 1025; i++) {
+        expect(arr[i]).toBe(i);
+      }
+    });
+  });
+
+  describe('Pop across tail boundaries', () => {
+    it('Pop from BRANCH_FACTOR + 1 items back to BRANCH_FACTOR', () => {
+      const items = Array.from({ length: BRANCH_FACTOR + 1 }, (_, i) => i);
+      const arr = pura(items);
+      const popped = arr.pop();
+      expect(popped).toBe(BRANCH_FACTOR);
+      expect(arr.length).toBe(BRANCH_FACTOR);
+    });
+
+    it('Pop across multiple tail boundaries', () => {
+      const size = BRANCH_FACTOR * 3 + 10;
+      const arr = pura(Array.from({ length: size }, (_, i) => i));
+
+      // Pop down to verify boundary crossings
+      for (let i = size - 1; i >= 0; i--) {
+        expect(arr.pop()).toBe(i);
+        expect(arr.length).toBe(i);
+      }
+      expect(arr.length).toBe(0);
+    });
+
+    it('Pop from 1025 items (crosses shift boundary)', () => {
+      const arr = pura(Array.from({ length: 1025 }, (_, i) => i));
+
+      // Pop back to 1024
+      expect(arr.pop()).toBe(1024);
+      expect(arr.length).toBe(1024);
+      expect(arr[1023]).toBe(1023);
+
+      // Pop back to 1023
+      expect(arr.pop()).toBe(1023);
+      expect(arr.length).toBe(1023);
+    });
+  });
+
+  describe('Large array correctness', () => {
+    it('5000 items - all indices accessible', () => {
+      const arr = pura(Array.from({ length: 5000 }, (_, i) => i));
+      expect(arr.length).toBe(5000);
+
+      // Sample check various indices
+      expect(arr[0]).toBe(0);
+      expect(arr[31]).toBe(31);
+      expect(arr[32]).toBe(32);
+      expect(arr[100]).toBe(100);
+      expect(arr[1000]).toBe(1000);
+      expect(arr[2000]).toBe(2000);
+      expect(arr[4999]).toBe(4999);
+    });
+
+    it('10000 items - iteration correctness', () => {
+      const arr = pura(Array.from({ length: 10000 }, (_, i) => i));
+
+      // For loop iteration
+      let sum = 0;
+      for (let i = 0; i < arr.length; i++) {
+        sum += arr[i]!;
+      }
+      expect(sum).toBe((10000 * 9999) / 2);
+
+      // For-of iteration
+      let sum2 = 0;
+      for (const v of arr) {
+        sum2 += v;
+      }
+      expect(sum2).toBe((10000 * 9999) / 2);
+    });
+
+    it('produce on large array preserves all data', () => {
+      const base = pura(Array.from({ length: 5000 }, (_, i) => i));
+
+      const result = produce(base, draft => {
+        draft[2500] = 99999;
+      });
+
+      // Base unchanged
+      expect(base[2500]).toBe(2500);
+
+      // Result has change
+      expect(result[2500]).toBe(99999);
+
+      // Other indices preserved
+      expect(result[0]).toBe(0);
+      expect(result[1000]).toBe(1000);
+      expect(result[4999]).toBe(4999);
+    });
+  });
+});
+
+// ===== Deep Proxy Behavior (Immer-style) =====
+describe('Deep Proxy Behavior', () => {
+  it('Nested object mutation in produce - replacement pattern still works', () => {
+    interface User {
+      name: string;
+      age: number;
+    }
+
+    const base = pura<User>([{ name: 'John', age: 20 }]);
+
+    // Replacement pattern still works
+    const result = produce(base, draft => {
+      draft[0] = { ...draft[0]!, age: 30 };
+    });
+
+    // Base unchanged
+    expect(base[0]!.age).toBe(20);
+    // Result has new value
+    expect(result[0]!.age).toBe(30);
+  });
+
+  it('Direct nested mutation works correctly (Immer-style)', () => {
+    interface User {
+      name: string;
+      age: number;
+    }
+
+    const base = pura<User>([{ name: 'John', age: 20 }]);
+
+    // Direct mutation now works correctly with deep proxy!
+    const result = produce(base, draft => {
+      const user = draft[0]!;
+      user.age = 99; // Deep proxy handles this
+    });
+
+    // Base unchanged (deep proxy COW)
+    expect(base[0]!.age).toBe(20);
+    // Result has new value
+    expect(result[0]!.age).toBe(99);
+  });
+
+  it('Deeply nested mutation works', () => {
+    interface Nested {
+      level1: {
+        level2: {
+          value: number;
+        };
+      };
+    }
+
+    const base = pura<Nested>([{ level1: { level2: { value: 1 } } }]);
+
+    const result = produce(base, draft => {
+      draft[0]!.level1.level2.value = 999;
+    });
+
+    // Base unchanged
+    expect(base[0]!.level1.level2.value).toBe(1);
+    // Result has new value
+    expect(result[0]!.level1.level2.value).toBe(999);
+  });
+
+  it('Array of primitives - direct mutation', () => {
+    const base = pura([1, 2, 3]);
+
+    const result = produce(base, draft => {
+      draft[0] = 100;
+    });
+
+    expect(base[0]).toBe(1);
+    expect(result[0]).toBe(100);
+  });
+
+  it('Nested array mutation', () => {
+    const base = pura([[1, 2], [3, 4]]);
+
+    const result = produce(base, draft => {
+      draft[0]!.push(99);
+      draft[1]![0] = 100;
+    });
+
+    // Base unchanged
+    expect(base[0]).toEqual([1, 2]);
+    expect(base[1]).toEqual([3, 4]);
+    // Result has changes
+    expect(result[0]).toEqual([1, 2, 99]);
+    expect(result[1]).toEqual([100, 4]);
+  });
+});
+
+// ===== Helper Functions =====
+describe('Helper Functions', () => {
+  describe('isPura', () => {
+    it('returns true for pura arrays', () => {
+      const arr = pura([1, 2, 3]);
+      expect(isPura(arr)).toBe(true);
+    });
+
+    it('returns false for native arrays', () => {
+      const arr = [1, 2, 3];
+      expect(isPura(arr)).toBe(false);
+    });
+
+    it('returns true for produce results', () => {
+      const base = pura([1, 2, 3]);
+      const result = produce(base, d => d.push(4));
+      expect(isPura(result)).toBe(true);
+    });
+  });
+
+  describe('repura', () => {
+    it('re-optimizes fallback-ed array after sort', () => {
+      const arr = pura([3, 1, 2]);
+      arr.sort((a, b) => a - b); // Triggers fallback
+
+      // Re-optimize
+      const optimized = repura(arr);
+
+      expect(optimized).toEqual([1, 2, 3]);
+      expect(isPura(optimized)).toBe(true);
+    });
+
+    it('is idempotent for already optimized arrays', () => {
+      const arr = pura([1, 2, 3]);
+      const result = repura(arr);
+
+      expect(result).toEqual([1, 2, 3]);
+      expect(isPura(result)).toBe(true);
+    });
+
+    it('converts native arrays to pura', () => {
+      const native = [1, 2, 3];
+      const result = repura(native);
+
+      expect(result).toEqual([1, 2, 3]);
+      expect(isPura(result)).toBe(true);
+    });
+  });
+});
+
+// ===== Sequence Consistency Tests =====
+describe('Sequence Consistency', () => {
+  const sizes = [0, 10, 31, 32, 33, 1023, 1024, 1025, 2048];
+
+  sizes.forEach(size => {
+    it(`vecFromArray correctness at size ${size}`, () => {
+      const arr = pura(Array.from({ length: size }, (_, i) => i));
+      expect(arr.length).toBe(size);
+      for (let i = 0; i < size; i++) {
+        expect(arr[i]).toBe(i);
+      }
+    });
+  });
+
+  it('Sequential push consistency', () => {
+    const arr = pura<number>([]);
+    for (let i = 0; i < 1050; i++) {
+      arr.push(i);
+      expect(arr.length).toBe(i + 1);
+      expect(arr[i]).toBe(i);
+    }
+  });
+
+  it('Sequential pop consistency', () => {
+    const arr = pura(Array.from({ length: 1050 }, (_, i) => i));
+    for (let i = 1049; i >= 0; i--) {
+      expect(arr.pop()).toBe(i);
+      expect(arr.length).toBe(i);
+    }
   });
 });

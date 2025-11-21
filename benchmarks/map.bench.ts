@@ -1,154 +1,384 @@
+/**
+ * Benchmark: Pura Map vs Native Map
+ *
+ * Compares three approaches:
+ * 1. Native Map (direct mutation)
+ * 2. Native Map with copy (immutable via new Map())
+ * 3. Pura Map (structural sharing)
+ */
+
 import { bench, describe } from 'vitest';
-import { IMap } from '../packages/core/src/map';
+import { pura, produce } from '../packages/core/src/index';
 
-describe('IMap vs native Map - Small (10 entries)', () => {
-  const entries = Array.from({ length: 10 }, (_, i) => [`key${i}`, i]);
+// ===== Setup =====
+const SMALL = 10;
+const MEDIUM = 100;
+const LARGE = 1000;
 
-  bench('IMap - create from entries', () => {
-    IMap.of(entries);
+function createMap(size: number): Map<string, number> {
+  const map = new Map<string, number>();
+  for (let i = 0; i < size; i++) {
+    map.set(`key${i}`, i);
+  }
+  return map;
+}
+
+// ===== Small maps (10 entries) =====
+describe('Small map (10 entries) - Single set', () => {
+  const nativeSmall = createMap(SMALL);
+  const puraSmall = pura(createMap(SMALL));
+
+  bench('Native (direct mutate)', () => {
+    nativeSmall.set('key5', 999);
+    return nativeSmall;
   });
 
-  bench('native Map - create from entries', () => {
-    new Map(entries);
+  bench('Native (copy then set)', () => {
+    const copy = new Map(nativeSmall);
+    copy.set('key5', 999);
+    return copy;
   });
 
-  const imap = IMap.of(entries);
-  const nmap = new Map(entries);
-
-  bench('IMap - get', () => {
-    imap.get('key5');
-  });
-
-  bench('native Map - get', () => {
-    nmap.get('key5');
-  });
-
-  bench('IMap - set (immutable)', () => {
-    imap.set('key5', 999);
-  });
-
-  bench('native Map - set (mutable)', () => {
-    nmap.set('key5', 999);
-  });
-
-  bench('IMap - delete (immutable)', () => {
-    imap.delete('key5');
-  });
-
-  bench('native Map - delete (mutable)', () => {
-    nmap.delete('key5');
+  bench('Pura (produce)', () => {
+    return produce(puraSmall, draft => {
+      draft.set('key5', 999);
+    });
   });
 });
 
-describe('IMap vs native Map - Medium (100 entries)', () => {
-  const entries = Array.from({ length: 100 }, (_, i) => [`key${i}`, i]);
+describe('Small map (10 entries) - Add entry', () => {
+  const nativeSmall = createMap(SMALL);
+  const puraSmall = pura(createMap(SMALL));
 
-  bench('IMap - create from 100 entries', () => {
-    IMap.of(entries);
+  bench('Native (direct mutate)', () => {
+    nativeSmall.set('newKey', 999);
+    nativeSmall.delete('newKey');
+    return nativeSmall;
   });
 
-  bench('native Map - create from 100 entries', () => {
-    new Map(entries);
+  bench('Native (copy then add)', () => {
+    const copy = new Map(nativeSmall);
+    copy.set('newKey', 999);
+    return copy;
   });
 
-  const imap = IMap.of(entries);
-  const nmap = new Map(entries);
-
-  bench('IMap - get (100 entries)', () => {
-    imap.get('key50');
-  });
-
-  bench('native Map - get (100 entries)', () => {
-    nmap.get('key50');
-  });
-
-  bench('IMap - set (100 entries)', () => {
-    imap.set('key50', 999);
-  });
-
-  bench('native Map - set (100 entries)', () => {
-    nmap.set('key50', 999);
+  bench('Pura (produce)', () => {
+    return produce(puraSmall, draft => {
+      draft.set('newKey', 999);
+    });
   });
 });
 
-describe('IMap vs native Map - Large (1000 entries)', () => {
-  const entries = Array.from({ length: 1000 }, (_, i) => [`key${i}`, i]);
+// ===== Medium maps (100 entries) =====
+describe('Medium map (100 entries) - Single set', () => {
+  const nativeMedium = createMap(MEDIUM);
+  const puraMedium = pura(createMap(MEDIUM));
 
-  bench('IMap - create from 1000 entries', () => {
-    IMap.of(entries);
+  bench('Native (direct mutate)', () => {
+    nativeMedium.set('key50', 999);
+    return nativeMedium;
   });
 
-  bench('native Map - create from 1000 entries', () => {
-    new Map(entries);
+  bench('Native (copy then set)', () => {
+    const copy = new Map(nativeMedium);
+    copy.set('key50', 999);
+    return copy;
   });
 
-  const imap = IMap.of(entries);
-  const nmap = new Map(entries);
-
-  bench('IMap - get (1000 entries)', () => {
-    imap.get('key500');
-  });
-
-  bench('native Map - get (1000 entries)', () => {
-    nmap.get('key500');
-  });
-
-  bench('IMap - set (1000 entries)', () => {
-    imap.set('key500', 999);
-  });
-
-  bench('native Map - set (1000 entries)', () => {
-    nmap.set('key500', 999);
-  });
-
-  bench('IMap - 10 sequential updates', () => {
-    let map = imap;
-    for (let i = 0; i < 10; i++) {
-      map = map.set(`key${i}`, 999);
-    }
-  });
-
-  bench('native Map - 10 sequential updates (mutable)', () => {
-    const map = new Map(nmap);
-    for (let i = 0; i < 10; i++) {
-      map.set(`key${i}`, 999);
-    }
+  bench('Pura (produce)', () => {
+    return produce(puraMedium, draft => {
+      draft.set('key50', 999);
+    });
   });
 });
 
-describe('IMap - Structural sharing benefits', () => {
-  const imap = IMap.of(
-    Array.from({ length: 1000 }, (_, i) => [`key${i}`, i])
-  );
+describe('Medium map (100 entries) - Multiple sets (10 keys)', () => {
+  const nativeMedium = createMap(MEDIUM);
+  const puraMedium = pura(createMap(MEDIUM));
+  const keys = ['key10', 'key20', 'key30', 'key40', 'key50', 'key60', 'key70', 'key80', 'key90', 'key99'];
 
-  bench('IMap - set same value (structural sharing)', () => {
-    imap.set('key500', 500); // Same value - should return same map
+  bench('Native (direct mutate)', () => {
+    for (const key of keys) {
+      nativeMedium.set(key, 999);
+    }
+    return nativeMedium;
   });
 
-  bench('IMap - set new value', () => {
-    imap.set('key500', 999);
+  bench('Native (copy once, then set)', () => {
+    const copy = new Map(nativeMedium);
+    for (const key of keys) {
+      copy.set(key, 999);
+    }
+    return copy;
   });
 
-  bench('IMap - delete non-existent key', () => {
-    imap.delete('nonexistent'); // Should return same map
+  bench('Pura (produce)', () => {
+    return produce(puraMedium, draft => {
+      for (const key of keys) {
+        draft.set(key, 999);
+      }
+    });
   });
 });
 
-describe('IMap - Iteration performance', () => {
-  const entries = Array.from({ length: 1000 }, (_, i) => [`key${i}`, i]);
-  const imap = IMap.of(entries);
-  const nmap = new Map(entries);
+// ===== Large maps (1000 entries) =====
+describe('Large map (1000 entries) - Single set', () => {
+  const nativeLarge = createMap(LARGE);
+  const puraLarge = pura(createMap(LARGE));
 
-  bench('IMap - iterate all entries', () => {
-    for (const [key, value] of imap) {
-      // Access to prevent optimization
-      key && value;
-    }
+  bench('Native (direct mutate)', () => {
+    nativeLarge.set('key500', 999);
+    return nativeLarge;
   });
 
-  bench('native Map - iterate all entries', () => {
-    for (const [key, value] of nmap) {
-      key && value;
+  bench('Native (copy then set)', () => {
+    const copy = new Map(nativeLarge);
+    copy.set('key500', 999);
+    return copy;
+  });
+
+  bench('Pura (produce)', () => {
+    return produce(puraLarge, draft => {
+      draft.set('key500', 999);
+    });
+  });
+});
+
+describe('Large map (1000 entries) - Multiple sets (100 keys)', () => {
+  const nativeLarge = createMap(LARGE);
+  const puraLarge = pura(createMap(LARGE));
+  const keys = Array.from({ length: 100 }, (_, i) => `key${i * 10}`);
+
+  bench('Native (direct mutate)', () => {
+    for (const key of keys) {
+      nativeLarge.set(key, 999);
     }
+    return nativeLarge;
+  });
+
+  bench('Native (copy once, then set)', () => {
+    const copy = new Map(nativeLarge);
+    for (const key of keys) {
+      copy.set(key, 999);
+    }
+    return copy;
+  });
+
+  bench('Pura (produce)', () => {
+    return produce(puraLarge, draft => {
+      for (const key of keys) {
+        draft.set(key, 999);
+      }
+    });
+  });
+});
+
+// ===== Delete operations =====
+describe('Large map (1000 entries) - Delete single', () => {
+  const nativeLarge = createMap(LARGE);
+  const puraLarge = pura(createMap(LARGE));
+
+  bench('Native (direct delete)', () => {
+    nativeLarge.delete('key500');
+    nativeLarge.set('key500', 500); // Restore
+    return nativeLarge;
+  });
+
+  bench('Native (copy then delete)', () => {
+    const copy = new Map(nativeLarge);
+    copy.delete('key500');
+    return copy;
+  });
+
+  bench('Pura (produce)', () => {
+    return produce(puraLarge, draft => {
+      draft.delete('key500');
+    });
+  });
+});
+
+// ===== Read operations =====
+describe('Large map (1000 entries) - Read single key', () => {
+  const nativeLarge = createMap(LARGE);
+  const puraLarge = pura(createMap(LARGE));
+
+  bench('Native (get)', () => {
+    return nativeLarge.get('key500');
+  });
+
+  bench('Pura (get)', () => {
+    return puraLarge.get('key500');
+  });
+});
+
+describe('Large map (1000 entries) - Check has', () => {
+  const nativeLarge = createMap(LARGE);
+  const puraLarge = pura(createMap(LARGE));
+
+  bench('Native (has)', () => {
+    return nativeLarge.has('key500');
+  });
+
+  bench('Pura (has)', () => {
+    return puraLarge.has('key500');
+  });
+});
+
+describe('Large map (1000 entries) - Read all entries', () => {
+  const nativeLarge = createMap(LARGE);
+  const puraLarge = pura(createMap(LARGE));
+
+  bench('Native (forEach)', () => {
+    let sum = 0;
+    nativeLarge.forEach(v => { sum += v; });
+    return sum;
+  });
+
+  bench('Pura (forEach)', () => {
+    let sum = 0;
+    puraLarge.forEach(v => { sum += v; });
+    return sum;
+  });
+
+  bench('Native (for...of)', () => {
+    let sum = 0;
+    for (const [, v] of nativeLarge) {
+      sum += v;
+    }
+    return sum;
+  });
+
+  bench('Pura (for...of)', () => {
+    let sum = 0;
+    for (const [, v] of puraLarge) {
+      sum += v;
+    }
+    return sum;
+  });
+});
+
+// ===== Iteration =====
+describe('Large map (1000 entries) - Iteration methods', () => {
+  const nativeLarge = createMap(LARGE);
+  const puraLarge = pura(createMap(LARGE));
+
+  bench('Native (keys)', () => {
+    return [...nativeLarge.keys()].length;
+  });
+
+  bench('Pura (keys)', () => {
+    return [...puraLarge.keys()].length;
+  });
+
+  bench('Native (values)', () => {
+    return [...nativeLarge.values()].length;
+  });
+
+  bench('Pura (values)', () => {
+    return [...puraLarge.values()].length;
+  });
+
+  bench('Native (entries)', () => {
+    return [...nativeLarge.entries()].length;
+  });
+
+  bench('Pura (entries)', () => {
+    return [...puraLarge.entries()].length;
+  });
+});
+
+// ===== Object keys =====
+describe('Medium map - Object keys', () => {
+  const key1 = { id: 1 };
+  const key2 = { id: 2 };
+  const key3 = { id: 3 };
+
+  const nativeMap = new Map([[key1, 1], [key2, 2], [key3, 3]]);
+  const puraMap = pura(new Map([[key1, 1], [key2, 2], [key3, 3]]));
+
+  bench('Native (get with object key)', () => {
+    return nativeMap.get(key2);
+  });
+
+  bench('Pura (get with object key)', () => {
+    return puraMap.get(key2);
+  });
+
+  bench('Native (set with object key)', () => {
+    nativeMap.set(key2, 999);
+    return nativeMap;
+  });
+
+  bench('Pura (produce set with object key)', () => {
+    return produce(puraMap, draft => {
+      draft.set(key2, 999);
+    });
+  });
+});
+
+// ===== Creation =====
+describe('Map creation (1000 entries)', () => {
+  const entries: [string, number][] = Array.from({ length: LARGE }, (_, i) => [`key${i}`, i]);
+
+  bench('Native (from entries)', () => {
+    return new Map(entries);
+  });
+
+  bench('Native (from existing)', () => {
+    const source = new Map(entries);
+    return new Map(source);
+  });
+
+  bench('Pura (from Map)', () => {
+    return pura(new Map(entries));
+  });
+});
+
+// ===== Nested maps =====
+describe('Nested map - Update inner value', () => {
+  const nativeNested = new Map([
+    ['outer', new Map([['inner', 0]])]
+  ]);
+  const puraNested = pura(new Map([
+    ['outer', new Map([['inner', 0]])]
+  ]));
+
+  bench('Native (direct mutate)', () => {
+    nativeNested.get('outer')!.set('inner', 999);
+    return nativeNested;
+  });
+
+  bench('Native (copy chain)', () => {
+    const innerCopy = new Map(nativeNested.get('outer')!);
+    innerCopy.set('inner', 999);
+    const outerCopy = new Map(nativeNested);
+    outerCopy.set('outer', innerCopy);
+    return outerCopy;
+  });
+
+  bench('Pura (produce)', () => {
+    return produce(puraNested, draft => {
+      draft.get('outer')!.set('inner', 999);
+    });
+  });
+});
+
+// ===== Clear operation =====
+describe('Large map (1000 entries) - Clear', () => {
+  bench('Native (direct clear)', () => {
+    const map = createMap(LARGE);
+    map.clear();
+    return map;
+  });
+
+  bench('Native (new empty)', () => {
+    return new Map<string, number>();
+  });
+
+  bench('Pura (produce clear)', () => {
+    const map = pura(createMap(LARGE));
+    return produce(map, draft => {
+      draft.clear();
+    });
   });
 });

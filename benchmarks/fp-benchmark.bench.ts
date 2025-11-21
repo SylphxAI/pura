@@ -36,90 +36,82 @@ describe('Creation (1000 items)', () => {
 });
 
 // ===== Push (append one item) =====
-describe('Push - Small (100 items)', () => {
-  const nativeSmall = createData(SIZES.small);
-  const puraSmall = pura(nativeSmall);
+describe('Push 1 item - Small (100 items)', () => {
+  const base = createData(SIZES.small);
+  const puraBase = pura(base);
 
-  bench('Native (mutable)', () => {
-    const arr = [...nativeSmall];
-    arr.push(100);
-    return arr;
+  bench('Mutable (direct)', () => {
+    base.push(100);
+    base.pop();
+    return base;
   });
 
-  bench('Native (copy - FP)', () => {
-    return [...nativeSmall, 100];
+  bench('Native (spread)', () => {
+    return [...base, 100];
   });
 
   bench('Pura (produce)', () => {
-    return produce(puraSmall, draft => {
-      draft.push(100);
-    });
+    return produce(puraBase, d => d.push(100));
   });
 });
 
-describe('Push - Large (10000 items)', () => {
-  const nativeLarge = createData(SIZES.large);
-  const puraLarge = pura(nativeLarge);
+describe('Push 1 item - Large (10000 items)', () => {
+  const base = createData(SIZES.large);
+  const puraBase = pura(base);
 
-  bench('Native (mutable)', () => {
-    const arr = [...nativeLarge];
-    arr.push(10000);
-    return arr;
+  bench('Mutable (direct)', () => {
+    base.push(10000);
+    base.pop();
+    return base;
   });
 
-  bench('Native (copy - FP)', () => {
-    return [...nativeLarge, 10000];
+  bench('Native (spread)', () => {
+    return [...base, 10000];
   });
 
   bench('Pura (produce)', () => {
-    return produce(puraLarge, draft => {
-      draft.push(10000);
-    });
+    return produce(puraBase, d => d.push(10000));
   });
 });
 
 // ===== Push multiple items =====
 describe('Push 10 items - Large (10000 items)', () => {
-  const nativeLarge = createData(SIZES.large);
-  const puraLarge = pura(nativeLarge);
-  const newItems = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const base = createData(SIZES.large);
+  const puraBase = pura(base);
+  const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-  bench('Native (mutable)', () => {
-    const arr = [...nativeLarge];
-    arr.push(...newItems);
-    return arr;
+  bench('Mutable (direct)', () => {
+    base.push(...items);
+    base.length -= 10;
+    return base;
   });
 
-  bench('Native (copy - FP)', () => {
-    return [...nativeLarge, ...newItems];
+  bench('Native (spread)', () => {
+    return [...base, ...items];
   });
 
   bench('Pura (produce)', () => {
-    return produce(puraLarge, draft => {
-      draft.push(...newItems);
-    });
+    return produce(puraBase, d => d.push(...items));
   });
 });
 
 // ===== Remove (pop) =====
-describe('Remove last - Large (10000 items)', () => {
-  const nativeLarge = createData(SIZES.large);
-  const puraLarge = pura(nativeLarge);
+describe('Pop - Large (10000 items)', () => {
+  const base = createData(SIZES.large);
+  const puraBase = pura(base);
 
-  bench('Native (mutable)', () => {
-    const arr = [...nativeLarge];
-    arr.pop();
-    return arr;
+  bench('Mutable (direct)', () => {
+    const val = base.pop();
+    base.push(val!);
+    return base;
   });
 
-  bench('Native (copy - FP)', () => {
-    return nativeLarge.slice(0, -1);
+  bench('Native (slice)', () => {
+    return base.slice(0, -1);
   });
 
   bench('Pura (produce)', () => {
-    return produce(puraLarge, draft => {
-      draft.pop();
-    });
+    return produce(puraBase, d => d.pop());
   });
 });
 
@@ -128,13 +120,20 @@ describe('Update single item - Small (100 items)', () => {
   const nativeSmall = createData(SIZES.small);
   const puraSmall = pura(nativeSmall);
 
-  bench('Native (mutable)', () => {
+  bench('Mutable (direct)', () => {
+    const old = nativeSmall[50];
+    nativeSmall[50] = 999;
+    nativeSmall[50] = old!;  // Reset
+    return nativeSmall;
+  });
+
+  bench('Native (spread + mutate)', () => {
     const arr = [...nativeSmall];
     arr[50] = 999;
     return arr;
   });
 
-  bench('Native (copy - FP)', () => {
+  bench('Native (map - FP)', () => {
     return nativeSmall.map((item, i) => i === 50 ? 999 : item);
   });
 
@@ -149,17 +148,24 @@ describe('Update single item - Large (10000 items)', () => {
   const nativeLarge = createData(SIZES.large);
   const puraLarge = pura(nativeLarge);
 
-  bench('Native (mutable)', () => {
+  bench('Mutable (direct)', () => {
+    const old = nativeLarge[5000];
+    nativeLarge[5000] = 999;
+    nativeLarge[5000] = old!;  // Reset
+    return nativeLarge;
+  });
+
+  bench('Native (spread + mutate)', () => {
     const arr = [...nativeLarge];
     arr[5000] = 999;
     return arr;
   });
 
-  bench('Native (copy - FP)', () => {
+  bench('Native (map - FP)', () => {
     return nativeLarge.map((item, i) => i === 5000 ? 999 : item);
   });
 
-  bench('Native (copy - FP with slice)', () => {
+  bench('Native (slice - FP)', () => {
     return [...nativeLarge.slice(0, 5000), 999, ...nativeLarge.slice(5001)];
   });
 
@@ -176,7 +182,17 @@ describe('Update 10 items - Large (10000 items)', () => {
   const puraLarge = pura(nativeLarge);
   const indices = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
 
-  bench('Native (mutable)', () => {
+  bench('Mutable (direct)', () => {
+    const oldVals = indices.map(i => nativeLarge[i]);
+    for (const idx of indices) {
+      nativeLarge[idx] = 999;
+    }
+    // Reset
+    indices.forEach((idx, i) => { nativeLarge[idx] = oldVals[i]!; });
+    return nativeLarge;
+  });
+
+  bench('Native (spread + mutate)', () => {
     const arr = [...nativeLarge];
     for (const idx of indices) {
       arr[idx] = 999;
@@ -184,7 +200,7 @@ describe('Update 10 items - Large (10000 items)', () => {
     return arr;
   });
 
-  bench('Native (copy - FP)', () => {
+  bench('Native (map - FP)', () => {
     return nativeLarge.map((item, i) => indices.includes(i) ? 999 : item);
   });
 
