@@ -1192,6 +1192,99 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
+        case 'reduceRight':
+          return (...reduceArgs: any[]) => {
+            const fn = reduceArgs[0] as (acc: any, v: T, i: number, a: T[]) => any;
+            const len = state.vec.count;
+            let acc: any;
+            let started = reduceArgs.length > 1;
+            if (started) acc = reduceArgs[1];
+            // Iterate backwards using vecGet (O(log n) per access)
+            for (let i = len - 1; i >= 0; i--) {
+              const v = vecGet(state.vec, i) as T;
+              if (!started) {
+                acc = v;
+                started = true;
+              } else {
+                acc = fn(acc, v, i, proxy);
+              }
+            }
+            return acc;
+          };
+
+        case 'findLast':
+          return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
+            const len = state.vec.count;
+            for (let i = len - 1; i >= 0; i--) {
+              const v = vecGet(state.vec, i) as T;
+              if (fn.call(thisArg, v, i, proxy)) return v;
+            }
+            return undefined;
+          };
+
+        case 'findLastIndex':
+          return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
+            const len = state.vec.count;
+            for (let i = len - 1; i >= 0; i--) {
+              const v = vecGet(state.vec, i) as T;
+              if (fn.call(thisArg, v, i, proxy)) return i;
+            }
+            return -1;
+          };
+
+        case 'toReversed':
+          return () => {
+            const len = state.vec.count;
+            const result = new Array(len);
+            for (let i = 0; i < len; i++) {
+              result[i] = vecGet(state.vec, len - 1 - i);
+            }
+            return result;
+          };
+
+        case 'toSorted':
+          return (compareFn?: (a: T, b: T) => number) => {
+            const arr: T[] = [];
+            for (const v of vecIter(state.vec)) {
+              arr.push(v);
+            }
+            return arr.sort(compareFn);
+          };
+
+        case 'toSpliced':
+          return (start: number, deleteCount?: number, ...items: T[]) => {
+            const len = state.vec.count;
+            const s = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+            const dc = deleteCount === undefined ? len - s : Math.max(0, deleteCount);
+            const result: T[] = [];
+            // Copy before start
+            for (let i = 0; i < s; i++) {
+              result.push(vecGet(state.vec, i) as T);
+            }
+            // Insert items
+            for (const item of items) {
+              result.push(item);
+            }
+            // Copy after deleted portion
+            for (let i = s + dc; i < len; i++) {
+              result.push(vecGet(state.vec, i) as T);
+            }
+            return result;
+          };
+
+        case 'with':
+          return (index: number, value: T) => {
+            const len = state.vec.count;
+            const idx = index < 0 ? len + index : index;
+            if (idx < 0 || idx >= len) throw new RangeError('Invalid index');
+            const result: T[] = [];
+            for (const v of vecIter(state.vec)) {
+              result.push(v);
+            }
+            result[idx] = value;
+            return result;
+          };
+
         case 'splice':
         case 'sort':
         case 'reverse':
