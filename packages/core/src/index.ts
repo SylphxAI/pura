@@ -2493,8 +2493,15 @@ function createMapProxy<K, V>(state: HMapState<K, V>): Map<K, V> {
       if (prop === 'toJSON') {
         return () => {
           const obj: any = {};
-          for (const [k, v] of hamtToEntries(state.map) as [any, any][]) {
-            obj[String(k)] = v;
+          // O(n) with insertion order when idxToVal available
+          if (state.ordered?.idxToVal) {
+            for (const [k, v] of orderEntryIter(state.ordered)) {
+              obj[String(k)] = v;
+            }
+          } else {
+            for (const [k, v] of hamtToEntries(state.map) as [any, any][]) {
+              obj[String(k)] = v;
+            }
           }
           return obj;
         };
