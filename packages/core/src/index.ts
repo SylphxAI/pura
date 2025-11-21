@@ -405,3 +405,9 @@ export function produce<T>(base: T, recipe: (draft: T) => void): T {
   recipe(base);
   return base;
 }
+
+// =====================================================
+// ProduceFast - Immutable mutation without proxy tracking
+// =====================================================
+
+export { produceFast } from './produce-fast';
