@@ -1383,18 +1383,117 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return proxy;
           };
 
-        case 'splice':
-        case 'sort':
-        case 'reverse':
         case 'shift':
-        case 'unshift':
-          return (...args: any[]) => {
-            // eslint-disable-next-line no-console
-            console.warn(`Pura: De-optimizing for ${String(prop)}`);
-            state.fallback = vecToArray(state.vec);
+          return () => {
+            if (state.vec.count === 0) return undefined;
+            const first = vecGet(state.vec, 0);
+            // Rebuild vec without first element (O(n) but no fallback)
+            const len = state.vec.count;
+            let newVec = emptyVec<T>();
+            const owner: Owner = {};
+            for (let i = 1; i < len; i++) {
+              newVec = vecPush(newVec, owner, vecGet(state.vec, i) as T);
+            }
+            state.vec = newVec;
             state.modified = true;
-            const fb: any = state.fallback;
-            return fb[prop as keyof any](...args);
+            state.cachedLeaf = undefined;
+            state.proxies?.clear();
+            return first;
+          };
+
+        case 'unshift':
+          return (...items: T[]) => {
+            if (items.length === 0) return state.vec.count;
+            // Rebuild vec with items prepended (O(n) but no fallback)
+            const len = state.vec.count;
+            let newVec = emptyVec<T>();
+            const owner: Owner = {};
+            // Add new items first
+            for (const item of items) {
+              newVec = vecPush(newVec, owner, item);
+            }
+            // Then add existing items
+            for (const v of vecIter(state.vec)) {
+              newVec = vecPush(newVec, owner, v);
+            }
+            state.vec = newVec;
+            state.modified = true;
+            state.cachedLeaf = undefined;
+            state.proxies?.clear();
+            return state.vec.count;
+          };
+
+        case 'splice':
+          return (start: number, deleteCount?: number, ...items: T[]) => {
+            const len = state.vec.count;
+            const s = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+            const dc = deleteCount === undefined ? len - s : Math.max(0, Math.min(deleteCount, len - s));
+
+            // Collect deleted items
+            const deleted: T[] = [];
+            for (let i = 0; i < dc; i++) {
+              deleted.push(vecGet(state.vec, s + i) as T);
+            }
+
+            // Rebuild vec
+            let newVec = emptyVec<T>();
+            const owner: Owner = {};
+            // Copy items before start
+            for (let i = 0; i < s; i++) {
+              newVec = vecPush(newVec, owner, vecGet(state.vec, i) as T);
+            }
+            // Insert new items
+            for (const item of items) {
+              newVec = vecPush(newVec, owner, item);
+            }
+            // Copy items after deleted section
+            for (let i = s + dc; i < len; i++) {
+              newVec = vecPush(newVec, owner, vecGet(state.vec, i) as T);
+            }
+
+            state.vec = newVec;
+            state.modified = true;
+            state.cachedLeaf = undefined;
+            state.proxies?.clear();
+            return deleted;
+          };
+
+        case 'reverse':
+          return () => {
+            const len = state.vec.count;
+            if (len <= 1) return proxy;
+            // Rebuild vec in reverse order
+            let newVec = emptyVec<T>();
+            const owner: Owner = {};
+            for (let i = len - 1; i >= 0; i--) {
+              newVec = vecPush(newVec, owner, vecGet(state.vec, i) as T);
+            }
+            state.vec = newVec;
+            state.modified = true;
+            state.cachedLeaf = undefined;
+            state.proxies?.clear();
+            return proxy;
+          };
+
+        case 'sort':
+          return (compareFn?: (a: T, b: T) => number) => {
+            // Collect items, sort, rebuild
+            const arr: T[] = [];
+            for (const v of vecIter(state.vec)) {
+              arr.push(v);
+            }
+            arr.sort(compareFn);
+            // Rebuild vec
+            let newVec = emptyVec<T>();
+            const owner: Owner = {};
+            for (const v of arr) {
+              newVec = vecPush(newVec, owner, v);
+            }
+            state.vec = newVec;
+            state.modified = true;
+            state.cachedLeaf = undefined;
+            state.proxies?.clear();
+            return proxy;
           };
       }
 
