@@ -47,10 +47,24 @@ describe('Object - Basic CRUD', () => {
       expect(obj.nested).toEqual({ x: 1 });
     });
 
-    it('should be idempotent - pura(pura(obj)) === pura(obj)', () => {
-      const obj = pura({ a: 1 });
+    it('should be idempotent for large objects (>= 512 props)', () => {
+      const largeObj: any = {};
+      for (let i = 0; i < 600; i++) {
+        largeObj[`key${i}`] = i;
+      }
+      const obj = pura(largeObj);
       const obj2 = pura(obj);
-      expect(obj).toBe(obj2);
+      expect(obj).toBe(obj2); // Large objects are idempotent
+      expect(isPura(obj)).toBe(true);
+    });
+
+    it('should create new copy for small objects (< 512 props)', () => {
+      const smallObj = { a: 1 };
+      const obj1 = pura(smallObj);
+      const obj2 = pura(smallObj);
+      expect(obj1).not.toBe(obj2); // Each call creates new copy
+      expect(isPura(obj1)).toBe(false); // Small objects are native
+      expect(isPura(obj2)).toBe(false);
     });
   });
 
@@ -660,9 +674,18 @@ describe('Object - Edge Cases', () => {
 
 describe('Object - Helper Functions', () => {
   describe('isPura', () => {
-    it('should return true for pura objects', () => {
-      const obj = pura({ a: 1 });
+    it('should return true for large pura objects (>= 512 props)', () => {
+      const largeObj: any = {};
+      for (let i = 0; i < 600; i++) {
+        largeObj[`key${i}`] = i;
+      }
+      const obj = pura(largeObj);
       expect(isPura(obj)).toBe(true);
+    });
+
+    it('should return false for small pura objects (< 512 props)', () => {
+      const obj = pura({ a: 1 });
+      expect(isPura(obj)).toBe(false); // Small objects are native
     });
 
     it('should return false for plain objects', () => {
@@ -677,10 +700,21 @@ describe('Object - Helper Functions', () => {
   });
 
   describe('unpura', () => {
-    it('should convert pura object to plain object', () => {
+    it('should convert large pura object to plain object', () => {
+      const largeObj: any = {};
+      for (let i = 0; i < 600; i++) {
+        largeObj[`key${i}`] = { val: i };
+      }
+      const obj = pura(largeObj);
+      const plain = unpura(obj);
+      expect(Object.keys(plain).length).toBe(600);
+      expect(isPura(plain)).toBe(false);
+    });
+
+    it('should return same object for small pura object (already native)', () => {
       const obj = pura({ a: 1, b: { c: 2 } });
       const plain = unpura(obj);
-      expect(plain).toEqual({ a: 1, b: { c: 2 } });
+      expect(plain).toBe(obj); // Small objects are already native
       expect(isPura(plain)).toBe(false);
     });
 
@@ -780,11 +814,20 @@ describe('Object - Direct Mutation', () => {
 // ============================================
 
 describe('Unified API - Arrays and Objects', () => {
-  it('should use same pura() for both', () => {
-    const arr = pura([1, 2, 3]);
-    const obj = pura({ a: 1 });
-    expect(isPura(arr)).toBe(true);
-    expect(isPura(obj)).toBe(true);
+  it('should use same pura() for both with adaptive optimization', () => {
+    const arrSmall = pura([1, 2, 3]);
+    const objSmall = pura({ a: 1 });
+    expect(isPura(arrSmall)).toBe(false); // Small array returns native
+    expect(isPura(objSmall)).toBe(false); // Small object returns native
+
+    const arrLarge = pura(Array.from({ length: 600 }, (_, i) => i));
+    const objLarge: any = {};
+    for (let i = 0; i < 600; i++) {
+      objLarge[`key${i}`] = i;
+    }
+    const puraObjLarge = pura(objLarge);
+    expect(isPura(arrLarge)).toBe(true); // Large array returns proxy
+    expect(isPura(puraObjLarge)).toBe(true); // Large object returns proxy
   });
 
   it('should use same produce() for both', () => {

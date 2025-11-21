@@ -61,6 +61,12 @@ describe('Small map (10 entries) - Add entry', () => {
     return nativeSmall;
   });
 
+  bench('Pura (direct mutate)', () => {
+    puraSmall.set('newKey', 999);
+    puraSmall.delete('newKey');
+    return puraSmall;
+  });
+
   bench('Native (copy then add)', () => {
     const copy = new Map(nativeSmall);
     copy.set('newKey', 999);
@@ -82,6 +88,11 @@ describe('Medium map (100 entries) - Single set', () => {
   bench('Native (direct mutate)', () => {
     nativeMedium.set('key50', 999);
     return nativeMedium;
+  });
+
+  bench('Pura (direct mutate)', () => {
+    puraMedium.set('key50', 999);
+    return puraMedium;
   });
 
   bench('Native (copy then set)', () => {
@@ -107,6 +118,13 @@ describe('Medium map (100 entries) - Multiple sets (10 keys)', () => {
       nativeMedium.set(key, 999);
     }
     return nativeMedium;
+  });
+
+  bench('Pura (direct mutate)', () => {
+    for (const key of keys) {
+      puraMedium.set(key, 999);
+    }
+    return puraMedium;
   });
 
   bench('Native (copy once, then set)', () => {
@@ -136,6 +154,11 @@ describe('Large map (1000 entries) - Single set', () => {
     return nativeLarge;
   });
 
+  bench('Pura (direct mutate)', () => {
+    puraLarge.set('key500', 999);
+    return puraLarge;
+  });
+
   bench('Native (copy then set)', () => {
     const copy = new Map(nativeLarge);
     copy.set('key500', 999);
@@ -159,6 +182,13 @@ describe('Large map (1000 entries) - Multiple sets (100 keys)', () => {
       nativeLarge.set(key, 999);
     }
     return nativeLarge;
+  });
+
+  bench('Pura (direct mutate)', () => {
+    for (const key of keys) {
+      puraLarge.set(key, 999);
+    }
+    return puraLarge;
   });
 
   bench('Native (copy once, then set)', () => {
@@ -187,6 +217,12 @@ describe('Large map (1000 entries) - Delete single', () => {
     nativeLarge.delete('key500');
     nativeLarge.set('key500', 500); // Restore
     return nativeLarge;
+  });
+
+  bench('Pura (direct delete)', () => {
+    puraLarge.delete('key500');
+    puraLarge.set('key500', 500); // Restore
+    return puraLarge;
   });
 
   bench('Native (copy then delete)', () => {
@@ -362,6 +398,11 @@ describe('Nested map - Update inner value', () => {
   bench('Native (direct mutate)', () => {
     nativeNested.get('outer')!.set('inner', 999);
     return nativeNested;
+  });
+
+  bench('Pura (direct mutate)', () => {
+    puraNested.get('outer')!.set('inner', 999);
+    return puraNested;
   });
 
   bench('Native (copy chain)', () => {

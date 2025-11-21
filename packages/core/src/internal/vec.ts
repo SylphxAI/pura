@@ -341,12 +341,62 @@ export function vecFromArray<T>(arr: T[]): Vec<T> {
     };
   }
 
+  // Bulk build: construct leaf nodes directly, then assemble tree bottom-up
   const owner: Owner = {};
-  let vec = emptyVec<T>();
-  for (let i = 0; i < len; i++) {
-    vec = vecPush(vec, owner, arr[i]!);
+
+  // Calculate how many full leaves we need (rest goes to tail)
+  const tailLen = len % BRANCH_FACTOR || BRANCH_FACTOR;
+  const treeCount = len - tailLen;
+  const numLeaves = treeCount / BRANCH_FACTOR;
+
+  if (numLeaves === 0) {
+    return {
+      count: len,
+      shift: BITS,
+      root: emptyNode<T>(),
+      tail: arr.slice(),
+      treeCount: 0,
+    };
   }
-  return vec;
+
+  // Build leaf nodes directly from array slices
+  const leaves: Node<T>[] = new Array(numLeaves);
+  for (let i = 0; i < numLeaves; i++) {
+    const start = i * BRANCH_FACTOR;
+    leaves[i] = { owner, arr: arr.slice(start, start + BRANCH_FACTOR) };
+  }
+
+  // Build tree bottom-up: leaves are at level 0, root is at level `shift`
+  // When shift = BITS, root.arr contains leaf nodes directly
+  let nodes: Node<T>[] = leaves;
+  let shift = BITS;
+
+  // Group nodes into parents until we have a single root
+  while (nodes.length > BRANCH_FACTOR) {
+    const parentCount = Math.ceil(nodes.length / BRANCH_FACTOR);
+    const parents: Node<T>[] = new Array(parentCount);
+
+    for (let i = 0; i < parentCount; i++) {
+      const start = i * BRANCH_FACTOR;
+      const end = Math.min(start + BRANCH_FACTOR, nodes.length);
+      parents[i] = { owner, arr: nodes.slice(start, end) };
+    }
+
+    nodes = parents;
+    shift += BITS;
+  }
+
+  // Final root node contains the remaining nodes (≤ BRANCH_FACTOR)
+  const root: Node<T> = { owner, arr: nodes };
+
+  return {
+    count: len,
+    shift,
+    root,
+    tail: arr.slice(treeCount),
+    treeCount,
+    tailOwner: owner,
+  };
 }
 
 export function vecToArray<T>(vec: Vec<T>): T[] {
@@ -409,6 +459,43 @@ export function* vecIter<T>(vec: Vec<T>): Generator<T, void, undefined> {
 
   for (let i = 0; i < tail.length; i++) {
     yield tail[i]!;
+  }
+}
+
+export function* vecIterReverse<T>(vec: Vec<T>): Generator<T, void, undefined> {
+  const { shift, root, tail, treeCount } = vec;
+
+  // Yield tail in reverse first
+  for (let i = tail.length - 1; i >= 0; i--) {
+    yield tail[i]!;
+  }
+
+  if (treeCount === 0) return;
+
+  // Traverse tree in reverse: rightmost children first
+  const stack: { node: Node<T>; level: number; idx: number }[] = [
+    { node: root, level: shift, idx: root.arr.length - 1 }
+  ];
+  let yielded = 0;
+
+  while (stack.length > 0 && yielded < treeCount) {
+    const frame = stack[stack.length - 1]!;
+    if (frame.level === 0) {
+      const leaf = frame.node.arr as T[];
+      while (frame.idx >= 0 && yielded < treeCount) {
+        yield leaf[frame.idx--]!;
+        yielded++;
+      }
+      stack.pop();
+    } else {
+      const children = frame.node.arr as Node<T>[];
+      if (frame.idx >= 0) {
+        const child = children[frame.idx--]!;
+        stack.push({ node: child, level: frame.level - BITS, idx: child.arr.length - 1 });
+      } else {
+        stack.pop();
+      }
+    }
   }
 }
 

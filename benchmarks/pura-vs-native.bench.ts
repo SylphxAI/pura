@@ -138,6 +138,30 @@ describe('[Immutable] Large (10000) - 100 updates', () => {
 // Note: Native arrays grow, so we reset between runs
 // ============================================================
 
+describe('[Mutable] Small (100) - Index write', () => {
+  bench('Native', () => {
+    nativeSmall[50] = 999;
+    return nativeSmall;
+  });
+
+  bench('Pura', () => {
+    puraSmall[50] = 999;
+    return puraSmall;
+  });
+});
+
+describe('[Mutable] Medium (1000) - Index write', () => {
+  bench('Native', () => {
+    nativeMedium[500] = 999;
+    return nativeMedium;
+  });
+
+  bench('Pura', () => {
+    puraMedium[500] = 999;
+    return puraMedium;
+  });
+});
+
 describe('[Mutable] Large (10000) - Index write', () => {
   bench('Native', () => {
     nativeLarge[5000] = 999;

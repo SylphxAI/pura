@@ -12,13 +12,26 @@ export function getStringIndex(i: number): string {
 }
 
 /**
+ * Popcount lookup table for 16-bit values (faster than bit manipulation for small values)
+ */
+const POPCOUNT_TABLE = new Uint8Array(65536);
+for (let i = 0; i < 65536; i++) {
+  let count = 0;
+  let n = i;
+  while (n) {
+    count += n & 1;
+    n >>>= 1;
+  }
+  POPCOUNT_TABLE[i] = count;
+}
+
+/**
  * Popcount (hamming weight) for CHAMP bitmap operations
  * Returns number of set bits in a 32-bit integer
+ * Uses lookup table for better performance on typical small bitmaps
  */
 export function popcount(x: number): number {
-  x -= (x >>> 1) & 0x55555555;
-  x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
-  return (((x + (x >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+  return POPCOUNT_TABLE[x & 0xffff] + POPCOUNT_TABLE[x >>> 16];
 }
 
 /**

@@ -33,6 +33,11 @@ describe('Small object (10 props) - Single update', () => {
     return nativeSmall;
   });
 
+  bench('Pura (direct mutate)', () => {
+    puraSmall.key5 = 999;
+    return puraSmall;
+  });
+
   bench('Native (spread copy)', () => {
     return { ...nativeSmall, key5: 999 };
   });
@@ -52,6 +57,12 @@ describe('Small object (10 props) - Add property', () => {
     (nativeSmall as any).newKey = 999;
     delete (nativeSmall as any).newKey;
     return nativeSmall;
+  });
+
+  bench('Pura (direct mutate)', () => {
+    (puraSmall as any).newKey = 999;
+    delete (puraSmall as any).newKey;
+    return puraSmall;
   });
 
   bench('Native (spread copy)', () => {
@@ -75,6 +86,11 @@ describe('Medium object (100 props) - Single update', () => {
     return nativeMedium;
   });
 
+  bench('Pura (direct mutate)', () => {
+    puraMedium.key50 = 999;
+    return puraMedium;
+  });
+
   bench('Native (spread copy)', () => {
     return { ...nativeMedium, key50: 999 };
   });
@@ -96,6 +112,13 @@ describe('Medium object (100 props) - Multiple updates (10 keys)', () => {
       nativeMedium[key] = 999;
     }
     return nativeMedium;
+  });
+
+  bench('Pura (direct mutate)', () => {
+    for (const key of keys) {
+      puraMedium[key] = 999;
+    }
+    return puraMedium;
   });
 
   bench('Native (spread copy)', () => {
@@ -133,6 +156,11 @@ describe('Large object (1000 props) - Single update', () => {
     return nativeLarge;
   });
 
+  bench('Pura (direct mutate)', () => {
+    puraLarge.key500 = 999;
+    return puraLarge;
+  });
+
   bench('Native (spread copy)', () => {
     return { ...nativeLarge, key500: 999 };
   });
@@ -154,6 +182,13 @@ describe('Large object (1000 props) - Multiple updates (100 keys)', () => {
       nativeLarge[key] = 999;
     }
     return nativeLarge;
+  });
+
+  bench('Pura (direct mutate)', () => {
+    for (const key of keys) {
+      puraLarge[key] = 999;
+    }
+    return puraLarge;
   });
 
   bench('Native (spread copy each)', () => {
@@ -207,6 +242,11 @@ describe('Nested object - Deep update', () => {
     return nativeNested;
   });
 
+  bench('Pura (direct mutate)', () => {
+    puraNested.level1.level2.level3.value = 999;
+    return puraNested;
+  });
+
   bench('Native (spread chain)', () => {
     return {
       ...nativeNested,
@@ -249,6 +289,11 @@ describe('Nested object - Wide shallow update', () => {
   bench('Native (direct mutate)', () => {
     nativeWide.c.value = 999;
     return nativeWide;
+  });
+
+  bench('Pura (direct mutate)', () => {
+    puraWide.c.value = 999;
+    return puraWide;
   });
 
   bench('Native (spread)', () => {

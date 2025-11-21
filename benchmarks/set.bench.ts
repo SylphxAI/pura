@@ -34,6 +34,12 @@ describe('Small set (10 values) - Add', () => {
     return nativeSmall;
   });
 
+  bench('Pura (direct add)', () => {
+    puraSmall.add(999);
+    puraSmall.delete(999);
+    return puraSmall;
+  });
+
   bench('Native (copy then add)', () => {
     const copy = new Set(nativeSmall);
     copy.add(999);
@@ -55,6 +61,12 @@ describe('Small set (10 values) - Delete', () => {
     nativeSmall.delete(5);
     nativeSmall.add(5);
     return nativeSmall;
+  });
+
+  bench('Pura (direct delete)', () => {
+    puraSmall.delete(5);
+    puraSmall.add(5);
+    return puraSmall;
   });
 
   bench('Native (copy then delete)', () => {
@@ -79,6 +91,12 @@ describe('Medium set (100 values) - Add single', () => {
     nativeMedium.add(999);
     nativeMedium.delete(999);
     return nativeMedium;
+  });
+
+  bench('Pura (direct add)', () => {
+    puraMedium.add(999);
+    puraMedium.delete(999);
+    return puraMedium;
   });
 
   bench('Native (copy then add)', () => {
@@ -109,6 +127,16 @@ describe('Medium set (100 values) - Add multiple (10 values)', () => {
     return nativeMedium;
   });
 
+  bench('Pura (direct add)', () => {
+    for (const v of toAdd) {
+      puraMedium.add(v);
+    }
+    for (const v of toAdd) {
+      puraMedium.delete(v);
+    }
+    return puraMedium;
+  });
+
   bench('Native (copy then add)', () => {
     const copy = new Set(nativeMedium);
     for (const v of toAdd) {
@@ -137,6 +165,12 @@ describe('Large set (1000 values) - Add single', () => {
     return nativeLarge;
   });
 
+  bench('Pura (direct add)', () => {
+    puraLarge.add(9999);
+    puraLarge.delete(9999);
+    return puraLarge;
+  });
+
   bench('Native (copy then add)', () => {
     const copy = new Set(nativeLarge);
     copy.add(9999);
@@ -158,6 +192,12 @@ describe('Large set (1000 values) - Delete single', () => {
     nativeLarge.delete(500);
     nativeLarge.add(500);
     return nativeLarge;
+  });
+
+  bench('Pura (direct delete)', () => {
+    puraLarge.delete(500);
+    puraLarge.add(500);
+    return puraLarge;
   });
 
   bench('Native (copy then delete)', () => {
@@ -186,6 +226,16 @@ describe('Large set (1000 values) - Delete multiple (100 values)', () => {
       nativeLarge.add(v);
     }
     return nativeLarge;
+  });
+
+  bench('Pura (direct delete)', () => {
+    for (const v of toDelete) {
+      puraLarge.delete(v);
+    }
+    for (const v of toDelete) {
+      puraLarge.add(v);
+    }
+    return puraLarge;
   });
 
   bench('Native (copy then delete)', () => {

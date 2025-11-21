@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { pura, produce, unpura, isPura, puraOrderedMap } from './index';
+import { pura, produce, unpura, isPura } from './index';
 
 // ============================================
 // 1. BASIC CRUD OPERATIONS
@@ -60,10 +60,17 @@ describe('Map - Basic CRUD', () => {
       expect(map.get('obj')).toEqual({ x: 1 });
     });
 
-    it('should be idempotent - pura(pura(map)) === pura(map)', () => {
+    it('small maps return native (adaptive)', () => {
       const map = pura(new Map([['a', 1]]));
+      expect(isPura(map)).toBe(false); // Small maps return native
+    });
+
+    it('large maps are idempotent', () => {
+      const largeMap = new Map(Array.from({ length: 600 }, (_, i) => [i, i]));
+      const map = pura(largeMap);
       const map2 = pura(map);
       expect(map).toBe(map2);
+      expect(isPura(map)).toBe(true);
     });
   });
 
@@ -432,8 +439,14 @@ describe('Map - Edge Cases', () => {
 
 describe('Map - Helper Functions', () => {
   describe('isPura', () => {
-    it('should return true for pura maps', () => {
+    it('should return false for small pura maps (adaptive)', () => {
       const map = pura(new Map([['a', 1]]));
+      expect(isPura(map)).toBe(false); // Small maps return native
+    });
+
+    it('should return true for large pura maps', () => {
+      const largeMap = new Map(Array.from({ length: 600 }, (_, i) => [i, i]));
+      const map = pura(largeMap);
       expect(isPura(map)).toBe(true);
     });
 
@@ -580,15 +593,15 @@ describe('Map - Error Handling', () => {
 // 13. ORDERED MAP (Insertion Order Preserved)
 // ============================================
 
-describe('Map - Ordered (puraOrderedMap)', () => {
+describe('Map - Ordered (pura)', () => {
   it('should preserve insertion order during iteration', () => {
-    const map = puraOrderedMap(new Map([['c', 3], ['a', 1], ['b', 2]]));
+    const map = pura(new Map([['c', 3], ['a', 1], ['b', 2]]));
     const keys = [...map.keys()];
     expect(keys).toEqual(['c', 'a', 'b']);
   });
 
   it('should maintain order after adding new entries', () => {
-    const map = puraOrderedMap(new Map([['a', 1]]));
+    const map = pura(new Map([['a', 1]]));
     const updated = produce(map, draft => {
       draft.set('b', 2);
       draft.set('c', 3);
@@ -598,7 +611,7 @@ describe('Map - Ordered (puraOrderedMap)', () => {
   });
 
   it('should not change order when updating existing key', () => {
-    const map = puraOrderedMap(new Map([['a', 1], ['b', 2], ['c', 3]]));
+    const map = pura(new Map([['a', 1], ['b', 2], ['c', 3]]));
     const updated = produce(map, draft => {
       draft.set('b', 200);  // Update existing key
     });
@@ -608,7 +621,7 @@ describe('Map - Ordered (puraOrderedMap)', () => {
   });
 
   it('should update order on delete', () => {
-    const map = puraOrderedMap(new Map([['a', 1], ['b', 2], ['c', 3]]));
+    const map = pura(new Map([['a', 1], ['b', 2], ['c', 3]]));
     const updated = produce(map, draft => {
       draft.delete('b');
     });
@@ -617,7 +630,7 @@ describe('Map - Ordered (puraOrderedMap)', () => {
   });
 
   it('should preserve order across multiple produce calls', () => {
-    const v1 = puraOrderedMap(new Map<string, number>());
+    const v1 = pura(new Map<string, number>());
     const v2 = produce(v1, d => { d.set('z', 1); });
     const v3 = produce(v2, d => { d.set('a', 2); });
     const v4 = produce(v3, d => { d.set('m', 3); });
@@ -626,26 +639,26 @@ describe('Map - Ordered (puraOrderedMap)', () => {
   });
 
   it('should work with forEach in insertion order', () => {
-    const map = puraOrderedMap(new Map([['c', 3], ['a', 1], ['b', 2]]));
+    const map = pura(new Map([['c', 3], ['a', 1], ['b', 2]]));
     const keys: string[] = [];
     map.forEach((_, k) => keys.push(k));
     expect(keys).toEqual(['c', 'a', 'b']);
   });
 
   it('should work with entries() in insertion order', () => {
-    const map = puraOrderedMap(new Map([['c', 3], ['a', 1], ['b', 2]]));
+    const map = pura(new Map([['c', 3], ['a', 1], ['b', 2]]));
     const entries = [...map.entries()];
     expect(entries).toEqual([['c', 3], ['a', 1], ['b', 2]]);
   });
 
   it('should work with values() in insertion order', () => {
-    const map = puraOrderedMap(new Map([['c', 3], ['a', 1], ['b', 2]]));
+    const map = pura(new Map([['c', 3], ['a', 1], ['b', 2]]));
     const values = [...map.values()];
     expect(values).toEqual([3, 1, 2]);
   });
 
   it('should reset order on clear', () => {
-    const map = puraOrderedMap(new Map([['a', 1], ['b', 2]]));
+    const map = pura(new Map([['a', 1], ['b', 2]]));
     const cleared = produce(map, draft => {
       draft.clear();
       draft.set('z', 1);

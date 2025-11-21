@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { pura, produce, unpura } from './index';
+import { pura, produce, unpura, isPura } from './index';
 
 describe('pura() - efficient array', () => {
   it('creates efficient array', () => {
@@ -226,11 +226,20 @@ describe('Three APIs - pura(), produce(), unpura()', () => {
       expect(efficient.length).toBe(3);
     });
 
-    it('efficient array -> returns same array', () => {
-      const efficient1 = pura([1, 2, 3]);
-      const efficient2 = pura(efficient1);
+    it('small array -> returns native copy (adaptive)', () => {
+      const arr = pura([1, 2, 3]);
+      // Small arrays return native, not proxy
+      expect(isPura(arr)).toBe(false);
+      expect(Array.isArray(arr)).toBe(true);
+    });
 
-      expect(efficient1 === efficient2).toBe(true);
+    it('large array -> returns proxy (adaptive)', () => {
+      const largeArr = Array.from({ length: 600 }, (_, i) => i);
+      const puraArr = pura(largeArr);
+      // Large arrays return tree proxy
+      expect(isPura(puraArr)).toBe(true);
+      // Idempotent for large arrays
+      expect(pura(puraArr) === puraArr).toBe(true);
     });
 
     it('works the same regardless of input type', () => {
@@ -337,8 +346,9 @@ describe('Three APIs - pura(), produce(), unpura()', () => {
       expect(back2).toEqual([1, 2, 3, 4, 6]);
     });
 
-    it('pura on pura result is idempotent', () => {
-      const arr1 = pura([1, 2, 3]);
+    it('pura on large array is idempotent', () => {
+      const largeArr = Array.from({ length: 600 }, (_, i) => i);
+      const arr1 = pura(largeArr);
       const arr2 = pura(arr1);
       const arr3 = pura(arr2);
 

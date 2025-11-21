@@ -48,10 +48,17 @@ describe('Set - Basic CRUD', () => {
       expect(set.size).toBe(3);
     });
 
-    it('should be idempotent - pura(pura(set)) === pura(set)', () => {
+    it('small sets return native (adaptive)', () => {
       const set = pura(new Set([1, 2, 3]));
+      expect(isPura(set)).toBe(false); // Small sets return native
+    });
+
+    it('large sets are idempotent', () => {
+      const largeSet = new Set(Array.from({ length: 600 }, (_, i) => i));
+      const set = pura(largeSet);
       const set2 = pura(set);
       expect(set).toBe(set2);
+      expect(isPura(set)).toBe(true);
     });
   });
 
@@ -382,8 +389,14 @@ describe('Set - Edge Cases', () => {
 
 describe('Set - Helper Functions', () => {
   describe('isPura', () => {
-    it('should return true for pura sets', () => {
+    it('should return false for small pura sets (adaptive)', () => {
       const set = pura(new Set([1, 2, 3]));
+      expect(isPura(set)).toBe(false); // Small sets return native
+    });
+
+    it('should return true for large pura sets', () => {
+      const largeSet = new Set(Array.from({ length: 600 }, (_, i) => i));
+      const set = pura(largeSet);
       expect(isPura(set)).toBe(true);
     });
 
@@ -550,15 +563,33 @@ describe('Set - Error Handling', () => {
 
 describe('Set - Unified API', () => {
   it('should use same pura() for arrays, objects, maps, and sets', () => {
-    const arr = pura([1, 2, 3]);
-    const obj = pura({ a: 1 });
-    const map = pura(new Map([['a', 1]]));
-    const set = pura(new Set([1, 2, 3]));
+    // Small collections return native
+    const arrSmall = pura([1, 2, 3]);
+    const mapSmall = pura(new Map([['a', 1]]));
+    const setSmall = pura(new Set([1, 2, 3]));
+    expect(isPura(arrSmall)).toBe(false);
+    expect(isPura(mapSmall)).toBe(false);
+    expect(isPura(setSmall)).toBe(false);
 
-    expect(isPura(arr)).toBe(true);
-    expect(isPura(obj)).toBe(true);
-    expect(isPura(map)).toBe(true);
-    expect(isPura(set)).toBe(true);
+    // Large collections return proxy
+    const arrLarge = pura(Array.from({ length: 600 }, (_, i) => i));
+    const mapLarge = pura(new Map(Array.from({ length: 600 }, (_, i) => [i, i])));
+    const setLarge = pura(new Set(Array.from({ length: 600 }, (_, i) => i)));
+    expect(isPura(arrLarge)).toBe(true);
+    expect(isPura(mapLarge)).toBe(true);
+    expect(isPura(setLarge)).toBe(true);
+
+    // Small objects return native (adaptive)
+    const objSmall = pura({ a: 1 });
+    expect(isPura(objSmall)).toBe(false);
+
+    // Large objects return proxy (adaptive)
+    const objLarge: any = {};
+    for (let i = 0; i < 600; i++) {
+      objLarge[`key${i}`] = i;
+    }
+    const puraObjLarge = pura(objLarge);
+    expect(isPura(puraObjLarge)).toBe(true);
   });
 
   it('should use same produce() for all types', () => {

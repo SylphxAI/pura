@@ -136,18 +136,19 @@ describe('Three APIs: pura, produce, unpura', () => {
       expect(native).toEqual([1, 2, 3]); // Native unchanged
     });
 
-    it('Idempotent: Efficient → Same reference', () => {
-      const eff1 = pura([1, 2, 3]);
+    it('Small arrays return native (adaptive)', () => {
+      const arr = pura([1, 2, 3]);
+      expect(isPura(arr)).toBe(false);
+      expect(Array.isArray(arr)).toBe(true);
+    });
+
+    it('Large arrays are idempotent', () => {
+      const largeArr = Array.from({ length: 600 }, (_, i) => i);
+      const eff1 = pura(largeArr);
       const eff2 = pura(eff1);
 
       expect(eff1 === eff2).toBe(true);
-    });
-
-    it('Idempotent: Multiple calls return same', () => {
-      const arr = pura([1, 2, 3]);
-      expect(pura(arr) === arr).toBe(true);
-      expect(pura(pura(arr)) === arr).toBe(true);
-      expect(pura(pura(pura(arr))) === arr).toBe(true);
+      expect(isPura(eff1)).toBe(true);
     });
   });
 
@@ -177,38 +178,56 @@ describe('Three APIs: pura, produce, unpura', () => {
       expect(result === arr).toBe(true);
     });
 
-    it('produce() returns pura object that can be mutated', () => {
-      // Array
-      const arr1 = pura([1, 2, 3]);
+    it('produce() with small arrays returns native', () => {
+      const arr1 = [1, 2, 3];
       const arr2 = produce(arr1, d => d.push(4));
-      expect(isPura(arr2)).toBe(true);
-      arr2.push(5); // Can mutate the result
-      expect(arr2).toEqual([1, 2, 3, 4, 5]);
+      // Small arrays return native
+      expect(isPura(arr2)).toBe(false);
+      expect(Array.isArray(arr2)).toBe(true);
+      expect(arr2).toEqual([1, 2, 3, 4]);
       expect(arr1).toEqual([1, 2, 3]); // Original unchanged
+    });
 
-      // Object
+    it('produce() with large arrays returns pura proxy', () => {
+      const largeArr = Array.from({ length: 600 }, (_, i) => i);
+      const arr1 = pura(largeArr);
+      const arr2 = produce(arr1, d => d.push(999));
+      expect(isPura(arr2)).toBe(true);
+      expect(arr2.length).toBe(601);
+      expect(arr1.length).toBe(600); // Original unchanged
+
+      // Small object (adaptive: returns native)
       const obj1 = pura({ a: 1 });
       const obj2 = produce(obj1, d => { d.b = 2; });
-      expect(isPura(obj2)).toBe(true);
+      expect(isPura(obj2)).toBe(false); // Small object returns native
       obj2.c = 3; // Can mutate the result
       expect(obj2).toEqual({ a: 1, b: 2, c: 3 });
       expect(obj1).toEqual({ a: 1 }); // Original unchanged
 
-      // Map
-      const map1 = pura(new Map([['a', 1]]));
-      const map2 = produce(map1, d => d.set('b', 2));
-      expect(isPura(map2)).toBe(true);
-      map2.set('c', 3); // Can mutate the result
-      expect(map2.get('c')).toBe(3);
-      expect(map1.has('c')).toBe(false); // Original unchanged
+      // Large object (adaptive: returns proxy)
+      const largeObj: any = {};
+      for (let i = 0; i < 600; i++) {
+        largeObj[`key${i}`] = i;
+      }
+      const largeObj1 = pura(largeObj);
+      const largeObj2 = produce(largeObj1, d => { (d as any).newKey = 999; });
+      expect(isPura(largeObj2)).toBe(true); // Large object returns proxy
 
-      // Set
-      const set1 = pura(new Set([1]));
-      const set2 = produce(set1, d => d.add(2));
+      // Map (large)
+      const largeMap = new Map(Array.from({ length: 600 }, (_, i) => [i, i]));
+      const map1 = pura(largeMap);
+      const map2 = produce(map1, d => d.set('new', 999));
+      expect(isPura(map2)).toBe(true);
+      expect(map2.get('new')).toBe(999);
+      expect(map1.has('new')).toBe(false); // Original unchanged
+
+      // Set (large)
+      const largeSet = new Set(Array.from({ length: 600 }, (_, i) => i));
+      const set1 = pura(largeSet);
+      const set2 = produce(set1, d => d.add(999));
       expect(isPura(set2)).toBe(true);
-      set2.add(3); // Can mutate the result
-      expect(set2.has(3)).toBe(true);
-      expect(set1.has(3)).toBe(false); // Original unchanged
+      expect(set2.has(999)).toBe(true);
+      expect(set1.has(999)).toBe(false); // Original unchanged
     });
   });
 
@@ -246,26 +265,28 @@ describe('Three APIs: pura, produce, unpura', () => {
       expect(Array.isArray(back)).toBe(true);
     });
 
-    it('All APIs accept both types seamlessly', () => {
+    it('All APIs accept both native and pura seamlessly', () => {
       const native = [1, 2, 3];
-      const eff1 = pura(native);
+      const puraSmall = pura(native);
 
       // produce() accepts both
       const r1 = produce(native, d => d.push(4));
-      const r2 = produce(eff1, d => d.push(4));
+      const r2 = produce(puraSmall, d => d.push(4));
       expect(r1).toEqual([1, 2, 3, 4]);
       expect(r2).toEqual([1, 2, 3, 4]);
 
-      // pura() accepts both
-      const p1 = pura(native);
-      const p2 = pura(eff1);
-      expect(p2 === eff1).toBe(true); // Idempotent
+      // Large arrays are idempotent
+      const largeNative = Array.from({ length: 600 }, (_, i) => i);
+      const puraLarge = pura(largeNative);
+      const p2 = pura(puraLarge);
+      expect(p2 === puraLarge).toBe(true); // Idempotent for large arrays
 
       // unpura() accepts both
       const u1 = unpura(native);
-      const u2 = unpura(eff1);
-      expect(u1 === native).toBe(true); // Idempotent
-      expect(u2).toEqual([1, 2, 3]);
+      const u2 = unpura(puraLarge);
+      expect(u1 === native).toBe(true); // Idempotent for native
+      expect(u2.length).toBe(600); // Unpacks large array
+      expect(u2[0]).toBe(0);
     });
   });
 });
@@ -1114,8 +1135,14 @@ describe('Deep Proxy Behavior', () => {
 // ===== Helper Functions =====
 describe('Helper Functions', () => {
   describe('isPura', () => {
-    it('returns true for pura arrays', () => {
+    it('returns false for small arrays (adaptive)', () => {
       const arr = pura([1, 2, 3]);
+      expect(isPura(arr)).toBe(false); // Small arrays return native
+    });
+
+    it('returns true for large pura arrays', () => {
+      const largeArr = Array.from({ length: 600 }, (_, i) => i);
+      const arr = pura(largeArr);
       expect(isPura(arr)).toBe(true);
     });
 
@@ -1124,39 +1151,46 @@ describe('Helper Functions', () => {
       expect(isPura(arr)).toBe(false);
     });
 
-    it('returns true for produce results', () => {
-      const base = pura([1, 2, 3]);
+    it('returns false for small produce results', () => {
+      const base = [1, 2, 3];
       const result = produce(base, d => d.push(4));
+      expect(isPura(result)).toBe(false); // Still small
+    });
+
+    it('returns true for large produce results', () => {
+      const largeBase = Array.from({ length: 600 }, (_, i) => i);
+      const result = produce(largeBase, d => d.push(999));
       expect(isPura(result)).toBe(true);
     });
   });
 
   describe('repura', () => {
-    it('re-optimizes fallback-ed array after sort', () => {
-      const arr = pura([3, 1, 2]);
-      arr.sort((a, b) => a - b); // Triggers fallback
-
-      // Re-optimize
+    it('small arrays remain native', () => {
+      const arr = [3, 1, 2];
       const optimized = repura(arr);
 
-      expect(optimized).toEqual([1, 2, 3]);
-      expect(isPura(optimized)).toBe(true);
+      expect(optimized).toEqual([3, 1, 2]);
+      expect(isPura(optimized)).toBe(false); // Small stays native
     });
 
-    it('is idempotent for already optimized arrays', () => {
-      const arr = pura([1, 2, 3]);
-      const result = repura(arr);
+    it('large arrays become pura proxy', () => {
+      const largeArr = Array.from({ length: 600 }, (_, i) => i);
+      const result = repura(largeArr);
 
-      expect(result).toEqual([1, 2, 3]);
+      expect(result.length).toBe(600);
       expect(isPura(result)).toBe(true);
     });
 
-    it('converts native arrays to pura', () => {
-      const native = [1, 2, 3];
-      const result = repura(native);
+    it('converts native arrays (adaptive based on size)', () => {
+      const small = [1, 2, 3];
+      const resultSmall = repura(small);
+      expect(resultSmall).toEqual([1, 2, 3]);
+      expect(isPura(resultSmall)).toBe(false); // Small stays native
 
-      expect(result).toEqual([1, 2, 3]);
-      expect(isPura(result)).toBe(true);
+      const large = Array.from({ length: 600 }, (_, i) => i);
+      const resultLarge = repura(large);
+      expect(resultLarge.length).toBe(600);
+      expect(isPura(resultLarge)).toBe(true); // Large becomes proxy
     });
   });
 });
