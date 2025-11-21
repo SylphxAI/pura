@@ -21,12 +21,22 @@ Opportunity: Best of both worlds - native performance for common cases, structur
   - Structural sharing only when beneficial (large data)
 - Legal: MIT license
 
+## User-Facing API
+Three primary APIs for users:
+1. **`produce(data, recipe)`** - Immutable mutation with proxy tracking (convenient but has overhead)
+2. **`produceFast(data, recipe)`** - Immutable mutation without proxy tracking (explicit paths, near-native performance)
+3. **`unpura(data)`** - Convert back to native JavaScript
+
+Internal API (not recommended for direct use):
+- **`pura(data)`** - Adaptive wrapper (automatically called by `produce`)
+
 ## Boundaries
 **In scope:**
 - Adaptive optimization (automatic native/proxy switching)
-- Immutable operations via `produce()`
+- Immutable operations via `produce()` and `produceFast()`
 - Direct mutation support (mutable semantics)
 - Read/write performance optimization
+- Path-based mutations for explicit change tracking
 
 **Out of scope:**
 - Custom data structures beyond Array/Map/Set/Object

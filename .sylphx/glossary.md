@@ -6,19 +6,24 @@
 **Context:** Small data (<512) returns native copy (no proxy), large data (≥512) returns proxy with persistent structures. Optimizes for common case (small data) while supporting efficient large data operations.
 
 ## Pura
-**Definition:** Adaptive wrapper function that returns optimized data structure.
-**Usage:** `pura(data)` - Main API entry point
-**Context:** Returns native copy for small data, proxy for large data. Does NOT mutate input.
+**Definition:** Internal adaptive wrapper function.
+**Usage:** `pura(data)` - Called internally by `produce()`
+**Context:** Returns native copy for small data, proxy for large data. Not recommended for direct use - `produce()` calls it automatically.
 
 ## Produce
-**Definition:** Immutable mutation function (Immer-like).
-**Usage:** `produce(puraData, recipe)` - Immutable operations
-**Context:** Always returns new snapshot (structurally shared for large data). Original unchanged. Recipe receives draft proxy for mutations.
+**Definition:** Immutable mutation with proxy tracking (convenient, has overhead).
+**Usage:** `produce(data, recipe)` - Main immutable API
+**Context:** Uses proxy to track all mutations in recipe. Always returns new snapshot (structurally shared for large data). Original unchanged. Trade-off: Convenient but has proxy overhead.
+
+## ProduceFast
+**Definition:** Immutable mutation without proxy tracking (explicit, near-native performance).
+**Usage:** `produceFast(data, recipe)` - Performance-focused immutable API
+**Context:** User explicitly specifies mutations via paths. No proxy tracking. Returns native copy. Trade-off: Requires explicit paths but achieves near-native performance (similar to spread/slice).
 
 ## Unpura
 **Definition:** Convert pura data back to native JavaScript.
-**Usage:** `unpura(puraData)` - Extract native data
-**Context:** Returns plain JS object/array/map/set. Use when passing to external libraries or serializing.
+**Usage:** `unpura(data)` - Extract native data
+**Context:** Returns plain JS object/array/map/set. Use when passing to external libraries or serializing. Ensures everything returns to native state.
 
 ## Adaptive Threshold
 **Definition:** Size limit where pura switches from native to proxy.

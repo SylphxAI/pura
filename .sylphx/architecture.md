@@ -3,32 +3,51 @@
 ## System Overview
 Pura is an adaptive immutable state library. Data structures automatically switch between native JavaScript and persistent data structures based on size thresholds (512 elements).
 
-Core API:
-- `pura(data)` - Adaptive wrapper (returns native or proxy based on size)
-- `produce(data, recipe)` - Immutable mutation (always returns new snapshot)
-- `unpura(data)` - Convert proxy back to native
+Core API (User-Facing):
+- `produce(data, recipe)` - Immutable mutation with proxy tracking (convenient, has overhead)
+- `produceFast(data, recipe)` - Immutable mutation without proxy (explicit paths, near-native perf)
+- `unpura(data)` - Convert back to native JavaScript
 
-Flow: User data → `pura()` → Adaptive (native/proxy) → `produce()` → New snapshot → `unpura()` → Native
+Internal API (Auto-used):
+- `pura(data)` - Adaptive wrapper (called internally by produce)
+
+Flow:
+- **With tracking**: User data → `produce()` → Auto `pura()` → Proxy draft → Track changes → New snapshot
+- **Without tracking**: User data → `produceFast()` → Native copy → Explicit mutations → New snapshot
+- **Extract**: Pura data → `unpura()` → Native JS
 
 ## Key Components
 
 ### Core API (`packages/core/src/index.ts`)
-- **`pura(data)`**: Adaptive wrapper
-  - Input: Native JS data (Array/Map/Set/Object)
-  - Output: Adaptive (small → native copy, large → proxy)
-  - Threshold: 512 elements
-  - Purpose: Optimize data structure based on size
 
-- **`produce(data, recipe)`**: Immutable mutation
-  - Input: Pura data (adaptive)
-  - Output: New snapshot (always pura, adaptive)
-  - Behavior: Structural sharing for large data, copy for small data
-  - Purpose: Immer-like immutable semantics
+**User-Facing APIs:**
+
+- **`produce(data, recipe)`**: Immutable mutation with proxy tracking
+  - Input: Any data (native or pura)
+  - Output: New snapshot (pura, adaptive)
+  - Behavior: Uses proxy to track mutations, structural sharing for large data
+  - Trade-off: Convenient (any mutation tracked) but has proxy overhead
+  - Use when: Convenience > performance, complex nested mutations
+
+- **`produceFast(data, recipe)`**: Immutable mutation without proxy
+  - Input: Any data (native or pura)
+  - Output: New snapshot (native copy)
+  - Behavior: User explicitly specifies mutations via paths, no proxy tracking
+  - Trade-off: Performance (near-native) but requires explicit paths
+  - Use when: Performance critical, simple mutations, hot paths
 
 - **`unpura(data)`**: Convert to native
   - Input: Pura data (proxy or native)
   - Output: Native JS data
-  - Purpose: Extract plain JS object/array/map/set
+  - Purpose: Extract plain JS object/array/map/set for external use
+
+**Internal API (Auto-used):**
+
+- **`pura(data)`**: Adaptive wrapper
+  - Input: Native JS data (Array/Map/Set/Object)
+  - Output: Adaptive (small → native copy, large → proxy)
+  - Threshold: 512 elements
+  - Purpose: Called internally by `produce()`, not recommended for direct use
 
 ### Adaptive Thresholds (`packages/core/src/internal/adaptive-thresholds.ts`)
 Centralized threshold configuration:
