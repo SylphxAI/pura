@@ -1120,9 +1120,29 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
 
         case 'concat':
           return (...args: any[]) => {
-            const arr = vecToArray(state.vec) as any;
-            const fn = arr[prop as keyof any];
-            return fn.apply(arr, args);
+            // Build result array using iteration (no intermediate full copy)
+            const result: T[] = [];
+            for (const v of vecIter(state.vec)) {
+              result.push(v);
+            }
+            for (const arg of args) {
+              if (Array.isArray(arg)) {
+                // If arg is a Pura array, use vecIter if available
+                const argState = ARRAY_STATE_ENV.get(arg);
+                if (argState && !argState.fallback) {
+                  for (const v of vecIter(argState.vec)) {
+                    result.push(v);
+                  }
+                } else {
+                  for (const v of arg) {
+                    result.push(v);
+                  }
+                }
+              } else {
+                result.push(arg);
+              }
+            }
+            return result;
           };
 
         case 'splice':
