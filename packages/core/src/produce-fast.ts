@@ -851,6 +851,11 @@ function produceFastObject<T extends object>(
 
 // ===== Main ProduceFast Function =====
 
+// Import for pura detection (avoid circular dependency)
+import { ARRAY_STATE_ENV, produceArray } from './internal/array-proxy';
+import { MAP_STATE_ENV, produceMap } from './internal/map-proxy';
+import { SET_STATE_ENV, produceSet } from './internal/set-proxy';
+
 /**
  * ProduceFast: Immutable mutation without proxy tracking
  *
@@ -859,12 +864,82 @@ function produceFastObject<T extends object>(
  * - Map: produceFast(map, $ => { $.set('key', 'value'); })
  * - Set: produceFast(set, $ => { $.add('item'); })
  * - Object: produceFast(obj, $ => { $.set(['user', 'name'], 'Alice'); })
+ *
+ * Performance optimization:
+ * - For pura tree structures (arrays/maps/sets >= threshold), delegates to produce()
+ * - For native structures, uses mutation-collection API (faster for small collections)
  */
 export function produceFast<T>(
   base: T,
   recipe: (helper: FastHelper<T>) => void
 ): T {
-  // Runtime type detection
+  // Check if it's pura tree → delegate to produceArray/Map/Set for optimal performance
+  if (Array.isArray(base) && ARRAY_STATE_ENV.has(base as any[])) {
+    // Pura array: use produceArray which has optimized tree operations
+    return produceArray(base, (draft: any) => {
+      const helper: ArrayHelper<any> = {
+        set(index: number, value: any) {
+          draft[index] = value;
+        },
+        delete(index: number) {
+          draft.splice(index, 1);
+        },
+        push(...items: any[]) {
+          draft.push(...items);
+        },
+        splice(start: number, deleteCount: number = 0, ...items: any[]) {
+          draft.splice(start, deleteCount, ...items);
+        },
+        filter(fn: (item: any, index: number) => boolean) {
+          const toKeep: any[] = [];
+          for (let i = 0; i < draft.length; i++) {
+            if (fn(draft[i], i)) toKeep.push(draft[i]);
+          }
+          draft.length = 0;
+          draft.push(...toKeep);
+        }
+      };
+      recipe(helper as any);
+    }) as T;
+  }
+
+  if (base instanceof Map && MAP_STATE_ENV.has(base as any)) {
+    // Pura map: use produceMap
+    return produceMap(base, (draft: any) => {
+      const helper: MapHelper<any, any> = {
+        set(key: any, value: any) {
+          draft.set(key, value);
+        },
+        delete(key: any) {
+          draft.delete(key);
+        },
+        clear() {
+          draft.clear();
+        }
+      };
+      recipe(helper as any);
+    }) as T;
+  }
+
+  if (base instanceof Set && SET_STATE_ENV.has(base as any)) {
+    // Pura set: use produceSet
+    return produceSet(base, (draft: any) => {
+      const helper: SetHelper<any> = {
+        add(value: any) {
+          draft.add(value);
+        },
+        delete(value: any) {
+          draft.delete(value);
+        },
+        clear() {
+          draft.clear();
+        }
+      };
+      recipe(helper as any);
+    }) as T;
+  }
+
+  // Native structures: use fast path (mutation-collection)
   if (Array.isArray(base)) {
     return produceFastArray(base as any, recipe as any) as any;
   }
