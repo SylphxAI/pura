@@ -1282,7 +1282,16 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             const cachedProxy = state.proxies?.get(idx);
             if (cachedProxy) return cachedProxy;
 
-            const value = vecGetCached(state, idx);
+            // Inline tail access (most common case - avoids function call overhead)
+            const { vec } = state;
+            let value: T | undefined;
+            if (idx >= vec.treeCount) {
+              // Direct tail access - O(1)
+              value = vec.tail[idx - vec.treeCount];
+            } else {
+              // Tree access - use cached leaf
+              value = vecGetCached(state, idx);
+            }
 
             if (
               state.isDraft &&
@@ -2491,9 +2500,16 @@ function hamtRemove<K, V>(
 }
 
 function hamtGet<K, V>(map: HMap<K, V>, key: K): V | undefined {
-  if (!map.root) return undefined;
+  const root = map.root;
+  if (!root) return undefined;
+
+  // Fast path: root is a single leaf (most common for small maps)
+  if (root.kind === 'leaf') {
+    return keyEquals(root.key, key) ? root.value : undefined;
+  }
+
   const hash = hashKey(key);
-  let node = map.root as HChild<K, V>;
+  let node = root as HChild<K, V>;
   let shift = 0;
 
   while (node) {
@@ -2522,9 +2538,16 @@ function hamtGet<K, V>(map: HMap<K, V>, key: K): V | undefined {
 
 // Proper has check - returns true even if value is undefined
 function hamtHas<K, V>(map: HMap<K, V>, key: K): boolean {
-  if (!map.root) return false;
+  const root = map.root;
+  if (!root) return false;
+
+  // Fast path: root is a single leaf
+  if (root.kind === 'leaf') {
+    return keyEquals(root.key, key);
+  }
+
   const hash = hashKey(key);
-  let node = map.root as HChild<K, V>;
+  let node = root as HChild<K, V>;
   let shift = 0;
 
   while (node) {
