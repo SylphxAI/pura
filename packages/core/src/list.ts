@@ -9,20 +9,31 @@
 
 import * as Vector from './vector';
 import type { List as IListInterface } from './types';
+import { SMALL_LIST_THRESHOLD } from './list-small';
 
 type VectorRoot<T> = ReturnType<typeof Vector.empty<T>>;
 
 /**
+ * Internal storage - either Vector Trie or flat array for small lists
+ */
+type ListStorage<T> =
+  | { type: 'vector'; root: VectorRoot<T> }
+  | { type: 'small'; array: readonly T[] };
+
+/**
  * Immutable Persistent List
+ *
+ * Automatically uses optimized flat array storage for small lists (≤32 elements)
+ * and persistent vector trie for larger lists.
  */
 export class IList<T = any> implements IListInterface<T> {
-  private constructor(private readonly root: VectorRoot<T>) {}
+  private constructor(private readonly storage: ListStorage<T>) {}
 
   /**
    * Create an empty list
    */
   static empty<T>(): IList<T> {
-    return new IList<T>(Vector.empty<T>());
+    return new IList<T>({ type: 'small', array: Object.freeze([]) });
   }
 
   /**
@@ -51,8 +62,14 @@ export class IList<T = any> implements IListInterface<T> {
    * @internal
    */
   private static fromArray<T>(items: T[]): IList<T> {
+    // Small list optimization: use flat array for ≤32 elements
+    if (items.length <= SMALL_LIST_THRESHOLD) {
+      return new IList<T>({ type: 'small', array: Object.freeze([...items]) });
+    }
+
+    // Large list: use persistent vector trie
     const root = Vector.fromArray(items);
-    return new IList<T>(root);
+    return new IList<T>({ type: 'vector', root });
   }
 
   /**
@@ -74,49 +91,91 @@ export class IList<T = any> implements IListInterface<T> {
    * Get size of list
    */
   get size(): number {
-    return this.root.size;
+    if (this.storage.type === 'small') {
+      return this.storage.array.length;
+    }
+    return this.storage.root.size;
   }
 
   /**
    * Get value at index
-   * O(log₃₂ n) ≈ O(1)
+   * O(1) for small lists, O(log₃₂ n) ≈ O(1) for large lists
    */
   get(index: number): T | undefined {
-    return Vector.get(this.root, index);
+    if (this.storage.type === 'small') {
+      return this.storage.array[index];
+    }
+    return Vector.get(this.storage.root, index);
   }
 
   /**
    * Check if index exists
    */
   has(index: number): boolean {
-    return index >= 0 && index < this.root.size;
+    return index >= 0 && index < this.size;
   }
 
   /**
    * Set value at index (returns new list)
-   * O(log₃₂ n) with structural sharing
+   * O(n) for small lists (but n ≤ 32), O(log₃₂ n) for large lists
    */
   set(index: number, value: T): IList<T> {
-    const newRoot = Vector.set(this.root, index, value);
-    return new IList(newRoot);
+    if (this.storage.type === 'small') {
+      if (index < 0 || index >= this.storage.array.length) {
+        throw new RangeError(`Index out of bounds: ${index}`);
+      }
+      const newArray = this.storage.array.slice();
+      (newArray as T[])[index] = value;
+      return new IList({ type: 'small', array: Object.freeze(newArray) });
+    }
+
+    const newRoot = Vector.set(this.storage.root, index, value);
+    return new IList({ type: 'vector', root: newRoot });
   }
 
   /**
    * Push value to end (returns new list)
-   * O(1) amortized
+   * O(1) for small lists, O(1) amortized for large lists
    */
   push(value: T): IList<T> {
-    const newRoot = Vector.push(this.root, value);
-    return new IList(newRoot);
+    if (this.storage.type === 'small') {
+      const newArray = [...this.storage.array, value];
+
+      // Check if we need to upgrade to vector
+      if (newArray.length > SMALL_LIST_THRESHOLD) {
+        const root = Vector.fromArray(newArray);
+        return new IList({ type: 'vector', root });
+      }
+
+      return new IList({ type: 'small', array: Object.freeze(newArray) });
+    }
+
+    const newRoot = Vector.push(this.storage.root, value);
+    return new IList({ type: 'vector', root: newRoot });
   }
 
   /**
    * Pop value from end (returns new list)
-   * O(1) amortized
+   * O(1) for small lists, O(1) amortized for large lists
    */
   pop(): IList<T> {
-    const newRoot = Vector.pop(this.root);
-    return new IList(newRoot);
+    if (this.storage.type === 'small') {
+      const newArray = this.storage.array.slice(0, -1);
+      return new IList({ type: 'small', array: Object.freeze(newArray) });
+    }
+
+    const newRoot = Vector.pop(this.storage.root);
+
+    // Check if we should downgrade to small array
+    if (newRoot.size <= SMALL_LIST_THRESHOLD) {
+      const array = [];
+      for (let i = 0; i < newRoot.size; i++) {
+        array.push(Vector.get(newRoot, i)!);
+      }
+      return new IList({ type: 'small', array: Object.freeze(array) });
+    }
+
+    return new IList({ type: 'vector', root: newRoot });
   }
 
   /**
@@ -143,8 +202,27 @@ export class IList<T = any> implements IListInterface<T> {
    * O(log n) with RRB-Tree rebalancing
    */
   concat(other: IList<T>): IList<T> {
-    const result = Vector.concat(this.root, other.root);
-    return new IList(result);
+    // Both small - can stay small if combined size ≤ threshold
+    if (this.storage.type === 'small' && other.storage.type === 'small') {
+      const combined = [...this.storage.array, ...other.storage.array];
+      if (combined.length <= SMALL_LIST_THRESHOLD) {
+        return new IList({ type: 'small', array: Object.freeze(combined) });
+      }
+      // Combined size exceeds threshold - upgrade to vector
+      const root = Vector.fromArray(combined);
+      return new IList({ type: 'vector', root });
+    }
+
+    // Convert both to vector and concat
+    const thisRoot = this.storage.type === 'small'
+      ? Vector.fromArray([...this.storage.array])
+      : this.storage.root;
+    const otherRoot = other.storage.type === 'small'
+      ? Vector.fromArray([...other.storage.array])
+      : other.storage.root;
+
+    const result = Vector.concat(thisRoot, otherRoot);
+    return new IList({ type: 'vector', root: result });
   }
 
   /**
@@ -152,45 +230,72 @@ export class IList<T = any> implements IListInterface<T> {
    * O(n) currently
    */
   slice(start?: number, end?: number): IList<T> {
-    // TODO: Optimize with tree slicing
-    const actualStart = start ?? 0;
-    const actualEnd = end ?? this.size;
-    let result = Vector.empty<T>();
+    const actualStart = Math.max(0, start ?? 0);
+    const actualEnd = Math.min(this.size, end ?? this.size);
+    const sliceSize = Math.max(0, actualEnd - actualStart);
 
+    // Fast path for small lists
+    if (this.storage.type === 'small') {
+      const sliced = this.storage.array.slice(actualStart, actualEnd);
+      return new IList({ type: 'small', array: sliced });
+    }
+
+    // Build array for result
+    const result: T[] = [];
     for (let i = actualStart; i < actualEnd && i < this.size; i++) {
       const value = this.get(i);
       if (value !== undefined) {
-        result = Vector.push(result, value);
+        result.push(value);
       }
     }
 
-    return new IList(result);
+    // Choose storage type based on result size
+    if (result.length <= SMALL_LIST_THRESHOLD) {
+      return new IList({ type: 'small', array: Object.freeze(result) });
+    }
+
+    const root = Vector.fromArray(result);
+    return new IList({ type: 'vector', root });
   }
 
   /**
    * Map over values (returns new list)
    */
   map<U>(fn: (value: T, index: number) => U): IList<U> {
-    let result = Vector.empty<U>();
+    const result: U[] = [];
     let index = 0;
     for (const value of this) {
-      result = Vector.push(result, fn(value, index++));
+      result.push(fn(value, index++));
     }
-    return new IList(result);
+
+    // Choose storage type based on result size
+    if (result.length <= SMALL_LIST_THRESHOLD) {
+      return new IList({ type: 'small', array: Object.freeze(result) });
+    }
+
+    const root = Vector.fromArray(result);
+    return new IList({ type: 'vector', root });
   }
 
   /**
    * Filter values (returns new list)
    */
   filter(fn: (value: T, index: number) => boolean): IList<T> {
-    let result = Vector.empty<T>();
+    const result: T[] = [];
     let index = 0;
     for (const value of this) {
       if (fn(value, index++)) {
-        result = Vector.push(result, value);
+        result.push(value);
       }
     }
-    return new IList(result);
+
+    // Choose storage type based on result size
+    if (result.length <= SMALL_LIST_THRESHOLD) {
+      return new IList({ type: 'small', array: Object.freeze(result) });
+    }
+
+    const root = Vector.fromArray(result);
+    return new IList({ type: 'vector', root });
   }
 
   /**
@@ -216,7 +321,10 @@ export class IList<T = any> implements IListInterface<T> {
    * Make iterable (for...of)
    */
   [Symbol.iterator](): Iterator<T> {
-    return Vector.iterate(this.root);
+    if (this.storage.type === 'small') {
+      return this.storage.array[Symbol.iterator]();
+    }
+    return Vector.iterate(this.storage.root);
   }
 
   /**
@@ -315,14 +423,21 @@ export class IList<T = any> implements IListInterface<T> {
    * Reverse list order
    */
   reverse(): IList<T> {
-    let result = Vector.empty<T>();
+    const result: T[] = [];
     for (let i = this.size - 1; i >= 0; i--) {
       const value = this.get(i);
       if (value !== undefined) {
-        result = Vector.push(result, value);
+        result.push(value);
       }
     }
-    return new IList(result);
+
+    // Choose storage type based on result size
+    if (result.length <= SMALL_LIST_THRESHOLD) {
+      return new IList({ type: 'small', array: Object.freeze(result) });
+    }
+
+    const root = Vector.fromArray(result);
+    return new IList({ type: 'vector', root });
   }
 
   /**
@@ -346,8 +461,15 @@ export class IList<T = any> implements IListInterface<T> {
    *   .toPersistent();
    */
   asTransient(): IList<T> {
-    const transientRoot = Vector.asTransient(this.root);
-    return new IList(transientRoot);
+    // For small lists, convert to vector first (transient is for large batch ops)
+    if (this.storage.type === 'small') {
+      const root = Vector.fromArray([...this.storage.array]);
+      const transientRoot = Vector.asTransient(root);
+      return new IList({ type: 'vector', root: transientRoot });
+    }
+
+    const transientRoot = Vector.asTransient(this.storage.root);
+    return new IList({ type: 'vector', root: transientRoot });
   }
 
   /**
@@ -357,8 +479,23 @@ export class IList<T = any> implements IListInterface<T> {
    * the transient version can no longer be used.
    */
   toPersistent(): IList<T> {
-    const persistentRoot = Vector.asPersistent(this.root);
-    return new IList(persistentRoot);
+    // Small lists are already persistent
+    if (this.storage.type === 'small') {
+      return this;
+    }
+
+    const persistentRoot = Vector.asPersistent(this.storage.root);
+
+    // Check if result should downgrade to small
+    if (persistentRoot.size <= SMALL_LIST_THRESHOLD) {
+      const array = [];
+      for (let i = 0; i < persistentRoot.size; i++) {
+        array.push(Vector.get(persistentRoot, i)!);
+      }
+      return new IList({ type: 'small', array: Object.freeze(array) });
+    }
+
+    return new IList({ type: 'vector', root: persistentRoot });
   }
 }
 
