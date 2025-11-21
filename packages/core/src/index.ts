@@ -12,9 +12,12 @@ const BITS = 5;
 const BRANCH_FACTOR = 1 << BITS;
 const MASK = BRANCH_FACTOR - 1;
 
-// Pre-allocated empty children array to slice from (avoids new Array().fill() allocations)
-const EMPTY_CHILDREN: null[] = new Array(BRANCH_FACTOR).fill(null);
-const createEmptyChildren = <T>(): (T | null)[] => EMPTY_CHILDREN.slice() as (T | null)[];
+// Popcount helper for CHAMP bitmap operations
+function popcount(x: number): number {
+  x -= (x >>> 1) & 0x55555555;
+  x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+  return (((x + (x >>> 4)) & 0x0f0f0f0f) * 0x01010101) >>> 24;
+}
 
 type Owner = object | undefined;
 
@@ -1084,7 +1087,8 @@ interface HCollision<K, V> {
 interface HNode<K, V> {
   kind: 'node';
   owner?: Owner;
-  children: Array<HChild<K, V> | null>;
+  bitmap: number;          // 32-bit bitmap indicating which slots are used
+  children: HChild<K, V>[]; // packed array, length === popcount(bitmap)
 }
 
 type HChild<K, V> = HLeaf<K, V> | HCollision<K, V> | HNode<K, V>;
@@ -1165,6 +1169,7 @@ function ensureEditableHNode<K, V>(node: HNode<K, V>, owner: Owner): HNode<K, V>
   return {
     kind: 'node',
     owner,
+    bitmap: node.bitmap,
     children: node.children.slice(),
   };
 }
@@ -1175,12 +1180,6 @@ function mergeLeaves<K, V>(
   owner: Owner,
   shift: number
 ): HNode<K, V> {
-  const root: HNode<K, V> = {
-    kind: 'node',
-    owner,
-    children: createEmptyChildren<HChild<K, V>>(),
-  };
-  let node = root;
   let s = shift;
 
   while (true) {
@@ -1188,23 +1187,30 @@ function mergeLeaves<K, V>(
     const idx2 = (leaf2.hash >>> s) & MASK;
 
     if (idx1 === idx2) {
-      const child: HNode<K, V> = {
+      // Same slot - need deeper node
+      const bit = 1 << idx1;
+      const child = mergeLeaves(leaf1, leaf2, owner, s + BITS);
+      return {
         kind: 'node',
         owner,
-        children: createEmptyChildren<HChild<K, V>>(),
+        bitmap: bit,
+        children: [child],
       };
-      node.children[idx1] = child;
-      node = child;
-      s += BITS;
-      continue;
     } else {
-      node.children[idx1] = leaf1;
-      node.children[idx2] = leaf2;
-      break;
+      // Different slots - create node with both leaves
+      const bit1 = 1 << idx1;
+      const bit2 = 1 << idx2;
+      const bitmap = bit1 | bit2;
+      // Children ordered by bit position (lower index first)
+      const children = idx1 < idx2 ? [leaf1, leaf2] : [leaf2, leaf1];
+      return {
+        kind: 'node',
+        owner,
+        bitmap,
+        children,
+      };
     }
   }
-
-  return root;
 }
 
 function hamtInsert<K, V>(
@@ -1283,17 +1289,39 @@ function hamtInsert<K, V>(
     }
   }
 
+  // node.kind === 'node' (CHAMP bitmap-indexed)
   const n = node;
   const idx = (hash >>> shift) & MASK;
-  const child = n.children[idx] as HChild<K, V> | null;
+  const bit = 1 << idx;
+  const hasSlot = (n.bitmap & bit) !== 0;
+  const packedIdx = popcount(n.bitmap & (bit - 1));
 
+  if (!hasSlot) {
+    // Slot is empty - insert new leaf
+    const newLeaf: HLeaf<K, V> = { kind: 'leaf', key, hash, value };
+    const newChildren = n.children.slice();
+    newChildren.splice(packedIdx, 0, newLeaf);
+    return {
+      node: {
+        kind: 'node',
+        owner,
+        bitmap: n.bitmap | bit,
+        children: newChildren,
+      },
+      added: true,
+      changed: true,
+    };
+  }
+
+  // Slot exists - recurse
+  const child = n.children[packedIdx];
   const res = hamtInsert(child, owner, hash, key, value, shift + BITS);
   if (!res.changed && !res.added) {
     return { node, added: false, changed: false };
   }
 
   const editable = ensureEditableHNode(n, owner);
-  editable.children[idx] = res.node;
+  editable.children[packedIdx] = res.node;
   return {
     node: editable,
     added: res.added,
@@ -1343,35 +1371,50 @@ function hamtRemove<K, V>(
     };
   }
 
+  // node.kind === 'node' (CHAMP bitmap-indexed)
   const n = node;
   const idx = (hash >>> shift) & MASK;
-  const child = n.children[idx] as HChild<K, V> | null;
-  if (!child) return { node, removed: false };
+  const bit = 1 << idx;
+  if ((n.bitmap & bit) === 0) {
+    // Slot doesn't exist
+    return { node, removed: false };
+  }
+
+  const packedIdx = popcount(n.bitmap & (bit - 1));
+  const child = n.children[packedIdx];
 
   const res = hamtRemove(child, owner, hash, key, shift + BITS);
   if (!res.removed) return { node, removed: false };
 
-  const editable = ensureEditableHNode(n, owner);
-  editable.children = editable.children.slice();
-  editable.children[idx] = res.node;
-
-  let nonNull: HChild<K, V> | null = null;
-  let nonNullCount = 0;
-  for (const c of editable.children) {
-    if (c) {
-      nonNull = c;
-      nonNullCount++;
-      if (nonNullCount > 1) break;
+  if (res.node === null) {
+    // Child was removed entirely
+    const newBitmap = n.bitmap ^ bit; // Clear the bit
+    if (newBitmap === 0) {
+      // Node is now empty
+      return { node: null, removed: true };
     }
+    const newChildren = n.children.slice();
+    newChildren.splice(packedIdx, 1);
+
+    // Compress: if only one child remains and it's a leaf/collision, promote it
+    if (newChildren.length === 1 && newChildren[0].kind !== 'node') {
+      return { node: newChildren[0], removed: true };
+    }
+
+    return {
+      node: {
+        kind: 'node',
+        owner,
+        bitmap: newBitmap,
+        children: newChildren,
+      },
+      removed: true,
+    };
   }
 
-  if (nonNullCount === 0) {
-    return { node: null, removed: true };
-  }
-  if (nonNullCount === 1 && nonNull!.kind !== 'node') {
-    return { node: nonNull!, removed: true };
-  }
-
+  // Child was updated (not removed)
+  const editable = ensureEditableHNode(n, owner);
+  editable.children[packedIdx] = res.node;
   return { node: editable, removed: true };
 }
 
@@ -1393,10 +1436,12 @@ function hamtGet<K, V>(map: HMap<K, V>, key: K): V | undefined {
       }
       return undefined;
     }
+    // CHAMP bitmap-indexed node
     const idx = (hash >>> shift) & MASK;
-    const child = node.children[idx];
-    if (!child) return undefined;
-    node = child as HChild<K, V>;
+    const bit = 1 << idx;
+    if ((node.bitmap & bit) === 0) return undefined;
+    const packedIdx = popcount(node.bitmap & (bit - 1));
+    node = node.children[packedIdx];
     shift += BITS;
   }
 
@@ -1420,10 +1465,12 @@ function hamtHas<K, V>(map: HMap<K, V>, key: K): boolean {
       }
       return false;
     }
+    // CHAMP bitmap-indexed node
     const idx = (hash >>> shift) & MASK;
-    const child = node.children[idx];
-    if (!child) return false;
-    node = child as HChild<K, V>;
+    const bit = 1 << idx;
+    if ((node.bitmap & bit) === 0) return false;
+    const packedIdx = popcount(node.bitmap & (bit - 1));
+    node = node.children[packedIdx];
     shift += BITS;
   }
 
@@ -1475,10 +1522,10 @@ function* hamtIter<K, V>(map: HMap<K, V>): IterableIterator<[K, V]> {
         yield [leaf.key, leaf.value];
       }
     } else {
-      // Push children in reverse for correct traversal order
-      for (let i = node.children.length - 1; i >= 0; i--) {
-        const c = node.children[i];
-        if (c) stack.push(c);
+      // CHAMP: packed array, push all children in reverse order
+      const children = node.children;
+      for (let i = children.length - 1; i >= 0; i--) {
+        stack.push(children[i]);
       }
     }
   }
