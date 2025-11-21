@@ -1798,29 +1798,34 @@ function hamtToEntries<K, V>(map: HMap<K, V>): [K, V][] {
 
 // =====================================================
 // OrderIndex for insertion order preservation
+// Uses Vec for idxToKey for O(1) iteration (instead of HAMT lookup per index)
 // =====================================================
+
+// Sentinel for deleted slots in Vec
+const DELETED = Symbol('DELETED');
 
 interface OrderIndex<K> {
   next: number;
   keyToIdx: HMap<K, number>;
-  idxToKey: HMap<number, K>;
+  idxToKey: Vec<K | typeof DELETED>;  // Vec instead of HAMT for fast iteration
+  holes: number;  // Count of deleted slots for potential compaction
 }
 
 function orderEmpty<K>(): OrderIndex<K> {
-  return { next: 0, keyToIdx: hamtEmpty(), idxToKey: hamtEmpty() };
+  return { next: 0, keyToIdx: hamtEmpty(), idxToKey: emptyVec(), holes: 0 };
 }
 
 function orderFromBase<K, V>(base: Map<K, V>): OrderIndex<K> {
   let keyToIdx = hamtEmpty<K, number>();
-  let idxToKey = hamtEmpty<number, K>();
+  const keys: (K | typeof DELETED)[] = [];
   let i = 0;
   const owner: Owner = {};
   for (const k of base.keys()) {
     keyToIdx = hamtSet(keyToIdx, owner, k, i);
-    idxToKey = hamtSet(idxToKey, owner, i, k);
+    keys.push(k);
     i++;
   }
-  return { next: i, keyToIdx, idxToKey };
+  return { next: i, keyToIdx, idxToKey: vecFromArray(keys), holes: 0 };
 }
 
 function orderAppend<K>(ord: OrderIndex<K>, owner: Owner, key: K): OrderIndex<K> {
@@ -1828,7 +1833,8 @@ function orderAppend<K>(ord: OrderIndex<K>, owner: Owner, key: K): OrderIndex<K>
   return {
     next: idx + 1,
     keyToIdx: hamtSet(ord.keyToIdx, owner, key, idx),
-    idxToKey: hamtSet(ord.idxToKey, owner, idx, key),
+    idxToKey: vecPush(ord.idxToKey, owner, key),
+    holes: ord.holes,
   };
 }
 
@@ -1838,28 +1844,29 @@ function orderDelete<K>(ord: OrderIndex<K>, owner: Owner, key: K): OrderIndex<K>
   return {
     next: ord.next,
     keyToIdx: hamtDelete(ord.keyToIdx, owner, key),
-    idxToKey: hamtDelete(ord.idxToKey, owner, idx),
+    idxToKey: vecAssoc(ord.idxToKey, owner, idx, DELETED),
+    holes: ord.holes + 1,
   };
 }
 
+// Fast O(n) iteration using vecIter - skips DELETED slots
 function* orderIter<K>(ord: OrderIndex<K>): IterableIterator<K> {
-  for (let i = 0; i < ord.next; i++) {
-    const k = hamtGet(ord.idxToKey, i);
-    if (k !== undefined) yield k;
+  for (const k of vecIter(ord.idxToKey)) {
+    if (k !== DELETED) yield k as K;
   }
 }
 
 function orderFromSetBase<T>(base: Set<T>): OrderIndex<T> {
   let keyToIdx = hamtEmpty<T, number>();
-  let idxToKey = hamtEmpty<number, T>();
+  const keys: (T | typeof DELETED)[] = [];
   let i = 0;
   const owner: Owner = {};
   for (const v of base) {
     keyToIdx = hamtSet(keyToIdx, owner, v, i);
-    idxToKey = hamtSet(idxToKey, owner, i, v);
+    keys.push(v);
     i++;
   }
-  return { next: i, keyToIdx, idxToKey };
+  return { next: i, keyToIdx, idxToKey: vecFromArray(keys), holes: 0 };
 }
 
 // =====================================================
