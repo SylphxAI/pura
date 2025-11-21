@@ -4,6 +4,7 @@
 
 import type { Owner } from './types';
 import {
+  SET_ADAPTIVE_THRESHOLD,
   hamtEmpty,
   hamtHas,
   hamtSet,
@@ -28,6 +29,54 @@ export interface HSetState<T> {
 }
 
 export const SET_STATE_ENV = new WeakMap<any, HSetState<any>>();
+
+
+// Create a lightweight draft proxy for native Sets (Immer-like)
+function createNativeSetDraftProxy<T>(
+  data: Set<T>,
+  markModified: () => void
+): Set<T> {
+  const proxy = new Proxy(data, {
+    get(target, prop) {
+      if (prop === 'size') return target.size;
+
+      if (prop === 'has') {
+        return (value: T) => target.has(value);
+      }
+
+      if (prop === 'add') {
+        return (value: T) => {
+          const hadBefore = target.has(value);
+          target.add(value);
+          if (!hadBefore) markModified();
+          return proxy;
+        };
+      }
+
+      if (prop === 'delete') {
+        return (value: T) => {
+          const result = target.delete(value);
+          if (result) markModified();
+          return result;
+        };
+      }
+
+      if (prop === 'clear') {
+        return () => {
+          if (target.size > 0) {
+            target.clear();
+            markModified();
+          }
+        };
+      }
+
+      const value = Reflect.get(target, prop);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+
+  return proxy;
+}
 
 export function hamtFromSet<T>(s: Set<T>): HMap<T, true> {
   let map = hamtEmpty<T, true>();
@@ -146,14 +195,47 @@ export function produceSet<T>(
   base: Set<T>,
   recipe: (draft: Set<T>) => void
 ): Set<T> {
+  const baseState = SET_STATE_ENV.get(base as any);
+  const isBaseProxy = !!baseState;
+  const baseSize = isBaseProxy ? baseState.map.size : base.size;
+
+  // Case 1: native small → native (Immer-like approach)
+  if (!isBaseProxy && baseSize < SET_ADAPTIVE_THRESHOLD) {
+    const draftData = new Set(base); // shallow copy
+    let modified = false;
+
+    const draft = createNativeSetDraftProxy(draftData, () => { modified = true; });
+    recipe(draft);
+
+    if (!modified) return base;
+
+    // Check result size: upgrade to HAMT if large
+    if (draftData.size >= SET_ADAPTIVE_THRESHOLD) {
+      const hamt = hamtFromSet(draftData);
+      const ordered = orderFromSetBase(draftData);
+      const finalState: HSetState<T> = {
+        map: hamt,
+        isDraft: false,
+        owner: undefined,
+        modified: false,
+        ordered,
+      };
+      return createSetProxy<T>(finalState);
+    }
+
+    // Still small → return native
+    return draftData;
+  }
+
+  // Case 2 & 3: large native or already proxy → use HAMT
   let baseMap: HMap<T, true>;
   let baseOrdered: OrderIndex<T> | null = null;
-  const baseState = SET_STATE_ENV.get(base as any);
   if (baseState) {
     baseMap = baseState.map;
     baseOrdered = baseState.ordered || null;
   } else {
     baseMap = hamtFromSet(base);
+    baseOrdered = orderFromSetBase(base);
   }
 
   const draftOwner: Owner = {};
@@ -168,10 +250,24 @@ export function produceSet<T>(
   const draft = createSetProxy<T>(draftState);
   recipe(draft);
 
-  if (!draftState.modified) {
-    return base;
+  if (!draftState.modified) return base;
+
+  // Case 4: Check result size - downgrade to native if small
+  if (draftState.map.size < SET_ADAPTIVE_THRESHOLD) {
+    const result = new Set<T>();
+    if (draftState.ordered) {
+      for (const v of orderIter(draftState.ordered)) {
+        result.add(v);
+      }
+    } else {
+      for (const [v] of hamtIter(draftState.map)) {
+        result.add(v);
+      }
+    }
+    return result;
   }
 
+  // Still large → return HAMT proxy
   const finalState: HSetState<T> = {
     map: draftState.map,
     isDraft: false,

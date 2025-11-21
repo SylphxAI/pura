@@ -13,6 +13,10 @@ import {
   NESTED_MAP_STATE,
   NESTED_SET_STATE,
   PROXY_CACHE,
+  ARRAY_ADAPTIVE_THRESHOLD,
+  OBJECT_ADAPTIVE_THRESHOLD,
+  MAP_ADAPTIVE_THRESHOLD,
+  SET_ADAPTIVE_THRESHOLD,
   vecFromArray,
   vecToArray,
   vecIter,
@@ -24,6 +28,8 @@ import {
   orderIter,
   orderEntryIter,
   createNestedProxy,
+  createNestedMapProxy,
+  createNestedSetProxy,
   isProxyModified,
   extractNestedValue,
   type NestedProxyState,
@@ -43,7 +49,7 @@ import {
 } from './internal';
 
 // =====================================================
-// Object produce (root object)
+// Object produce (root object) - Adaptive
 // =====================================================
 
 function produceObject<T extends object>(
@@ -53,11 +59,94 @@ function produceObject<T extends object>(
   const maybeNested = (base as any)[NESTED_PROXY_STATE] as
     | NestedProxyState<T>
     | undefined;
+  const isBaseProxy = !!maybeNested;
 
   const plainBase = maybeNested
     ? (maybeNested.copy || maybeNested.base)
     : base;
 
+  const basePropCount = Object.keys(plainBase).length;
+
+  // Case 1: native small → native (Immer-like with shallow copy)
+  if (!isBaseProxy && basePropCount < OBJECT_ADAPTIVE_THRESHOLD) {
+    const copy = { ...plainBase };
+    let modified = false;
+    const childProxies = new Map<string | symbol, any>();
+
+    const draft = new Proxy(copy, {
+      get(target, prop, receiver) {
+        if (prop === NESTED_PROXY_STATE) {
+          return { base: plainBase, copy, childProxies };
+        }
+
+        const value = Reflect.get(target, prop, receiver);
+
+        if (value !== null && typeof value === 'object') {
+          if (value instanceof Date || value instanceof RegExp ||
+              value instanceof Error || value instanceof Promise ||
+              ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+            return value;
+          }
+
+          if (!childProxies.has(prop)) {
+            if (value instanceof Map) {
+              const mapDraft = createNestedMapProxy(value as Map<any, any>, () => { modified = true; });
+              childProxies.set(prop, mapDraft);
+            } else if (value instanceof Set) {
+              const setDraft = createNestedSetProxy(value as Set<any>, () => { modified = true; });
+              childProxies.set(prop, setDraft);
+            } else {
+              childProxies.set(prop, createNestedProxy(value as object, () => { modified = true; }));
+            }
+          }
+          return childProxies.get(prop);
+        }
+
+        return value;
+      },
+      set(target, prop, value) {
+        modified = true;
+        childProxies.delete(prop);
+        (target as any)[prop] = value;
+        return true;
+      },
+      deleteProperty(target, prop) {
+        modified = true;
+        childProxies.delete(prop);
+        return Reflect.deleteProperty(target, prop);
+      }
+    }) as T;
+
+    recipe(draft);
+
+    // Finalize nested proxies
+    if (childProxies.size > 0) {
+      for (const [key, childProxy] of childProxies) {
+        if (isProxyModified(childProxy)) {
+          const finalValue = extractNestedValue(childProxy);
+          if (finalValue !== (copy as any)[key]) {
+            (copy as any)[key] = finalValue;
+            modified = true;
+          }
+        }
+      }
+    }
+
+    if (!modified) return base;
+
+    // Check result size: upgrade to proxy if large
+    const resultPropCount = Object.keys(copy).length;
+    if (resultPropCount >= OBJECT_ADAPTIVE_THRESHOLD) {
+      const proxy = createNestedProxy(copy, () => {}) as T;
+      PROXY_CACHE.set(copy, proxy);
+      return proxy;
+    }
+
+    // Still small → return native
+    return copy;
+  }
+
+  // Case 2 & 3: large native or already proxy → use nested proxy
   let modified = false;
   const draft = createNestedProxy(plainBase, () => {
     modified = true;
@@ -70,25 +159,51 @@ function produceObject<T extends object>(
   }
 
   const result = extractNestedValue(draft) as T;
+
+  // Case 4: Check result size - downgrade to native if small
+  const resultPropCount = Object.keys(result).length;
+  if (resultPropCount < OBJECT_ADAPTIVE_THRESHOLD) {
+    return result; // Return plain object
+  }
+
+  // Still large → return proxy
   return pura(result);
 }
+
+// =====================================================
+// Re-export adaptive thresholds (defined in internal/adaptive-thresholds.ts)
+// =====================================================
+
+export {
+  ARRAY_ADAPTIVE_THRESHOLD,
+  OBJECT_ADAPTIVE_THRESHOLD,
+  MAP_ADAPTIVE_THRESHOLD,
+  SET_ADAPTIVE_THRESHOLD,
+};
 
 // =====================================================
 // Public APIs
 // =====================================================
 
 /**
- * Create a Pura value.
- * - Array → bit-trie Vec proxy
+ * Create a Pura value with adaptive optimization.
+ * - Small array (< 512) → native copy (zero overhead)
+ * - Large array (>= 512) → bit-trie Vec proxy (structural sharing)
  * - Object → deep COW proxy
- * - Map → HAMT-style persistent Map proxy
- * - Set → HAMT-style persistent Set proxy
+ * - Small Map/Set (< 512) → native copy
+ * - Large Map/Set (>= 512) → HAMT proxy with insertion order
  */
 export function pura<T>(value: T): T {
   if (Array.isArray(value)) {
     const arr = value as any[];
     if (ARRAY_STATE_ENV.has(arr)) return value;
 
+    // Small array → return native copy
+    if (arr.length < ARRAY_ADAPTIVE_THRESHOLD) {
+      return arr.slice() as any as T;
+    }
+
+    // Large array → return tree proxy
     const vec = vecFromArray(arr);
     return createArrayProxy<any>({
       vec,
@@ -101,24 +216,42 @@ export function pura<T>(value: T): T {
   if (value instanceof Map) {
     const m = value as Map<any, any>;
     if (MAP_STATE_ENV.has(m)) return value;
+
+    // Small Map → return native copy
+    if (m.size < MAP_ADAPTIVE_THRESHOLD) {
+      return new Map(m) as any as T;
+    }
+
+    // Large Map → return HAMT proxy (ordered by default)
     const hamt = hamtFromMap(m);
+    const ordered = orderFromBase(m);
     return createMapProxy({
       map: hamt,
       isDraft: false,
       owner: undefined,
       modified: false,
+      ordered,
     }) as any as T;
   }
 
   if (value instanceof Set) {
     const s = value as Set<any>;
     if (SET_STATE_ENV.has(s)) return value;
+
+    // Small Set → return native copy
+    if (s.size < SET_ADAPTIVE_THRESHOLD) {
+      return new Set(s) as any as T;
+    }
+
+    // Large Set → return HAMT proxy (ordered by default)
     const hamt = hamtFromSet(s);
+    const ordered = orderFromSetBase(s);
     return createSetProxy({
       map: hamt,
       isDraft: false,
       owner: undefined,
       modified: false,
+      ordered,
     }) as any as T;
   }
 
@@ -130,6 +263,15 @@ export function pura<T>(value: T): T {
       return PROXY_CACHE.get(obj) as T;
     }
 
+    // Count own enumerable properties
+    const propCount = Object.keys(obj).length;
+
+    // Small object → return shallow copy
+    if (propCount < OBJECT_ADAPTIVE_THRESHOLD) {
+      return { ...obj } as T;
+    }
+
+    // Large object → return nested proxy
     const proxy = createNestedProxy(obj, () => {}) as any as T;
     PROXY_CACHE.set(obj, proxy);
     return proxy;
@@ -138,41 +280,6 @@ export function pura<T>(value: T): T {
   return value;
 }
 
-/**
- * Create an ordered Pura Map that preserves insertion order.
- * Iteration (keys/values/entries/forEach) follows insertion order like native Map.
- * Trade-off: ~2x overhead for set/delete operations.
- */
-export function puraOrderedMap<K, V>(m: Map<K, V>): Map<K, V> {
-  if (MAP_STATE_ENV.has(m as any)) return m;
-  const hamt = hamtFromMap(m);
-  const ordered = orderFromBase(m);
-  return createMapProxy({
-    map: hamt,
-    isDraft: false,
-    owner: undefined,
-    modified: false,
-    ordered,
-  });
-}
-
-/**
- * Create an ordered Pura Set that preserves insertion order.
- * Iteration (values/keys/entries/forEach) follows insertion order like native Set.
- * Trade-off: ~2x overhead for add/delete operations.
- */
-export function puraOrderedSet<T>(s: Set<T>): Set<T> {
-  if (SET_STATE_ENV.has(s as any)) return s;
-  const hamt = hamtFromSet(s);
-  const ordered = orderFromSetBase(s);
-  return createSetProxy({
-    map: hamt,
-    isDraft: false,
-    owner: undefined,
-    modified: false,
-    ordered,
-  });
-}
 
 /**
  * Convert Pura value back to plain JS.

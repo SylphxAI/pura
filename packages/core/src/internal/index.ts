@@ -18,6 +18,14 @@ export {
   PROXY_CACHE,
 } from './constants';
 
+// Adaptive thresholds
+export {
+  ARRAY_ADAPTIVE_THRESHOLD,
+  OBJECT_ADAPTIVE_THRESHOLD,
+  MAP_ADAPTIVE_THRESHOLD,
+  SET_ADAPTIVE_THRESHOLD,
+} from './adaptive-thresholds';
+
 // Utils
 export { getStringIndex, popcount } from './utils';
 

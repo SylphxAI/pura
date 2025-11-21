@@ -4,6 +4,7 @@
 
 import type { Owner } from './types';
 import {
+  MAP_ADAPTIVE_THRESHOLD,
   hamtEmpty,
   hamtGet,
   hamtHas,
@@ -37,6 +38,77 @@ export interface HMapState<K, V> {
 }
 
 export const MAP_STATE_ENV = new WeakMap<any, HMapState<any, any>>();
+
+
+// Create a lightweight draft proxy for native Maps (Immer-like)
+function createNativeMapDraftProxy<K, V>(
+  data: Map<K, V>,
+  markModified: () => void,
+  valueProxies: Map<K, any>
+): Map<K, V> {
+  const proxy = new Proxy(data, {
+    get(target, prop) {
+      if (prop === 'size') return target.size;
+
+      if (prop === 'get') {
+        return (key: K) => {
+          const cached = valueProxies.get(key);
+          if (cached) return cached;
+
+          const value = target.get(key);
+          if (value !== null && typeof value === 'object') {
+            let nestedProxy: any;
+            if (value instanceof Map) {
+              nestedProxy = createNestedMapProxy(value as Map<any, any>, markModified);
+            } else if (value instanceof Set) {
+              nestedProxy = createNestedSetProxy(value as Set<any>, markModified);
+            } else {
+              nestedProxy = createNestedProxy(value as object, markModified);
+            }
+            valueProxies.set(key, nestedProxy);
+            return nestedProxy;
+          }
+          return value;
+        };
+      }
+
+      if (prop === 'set') {
+        return (key: K, value: V) => {
+          target.set(key, value);
+          valueProxies.delete(key);
+          markModified();
+          return proxy;
+        };
+      }
+
+      if (prop === 'delete') {
+        return (key: K) => {
+          const result = target.delete(key);
+          if (result) {
+            valueProxies.delete(key);
+            markModified();
+          }
+          return result;
+        };
+      }
+
+      if (prop === 'clear') {
+        return () => {
+          if (target.size > 0) {
+            target.clear();
+            valueProxies.clear();
+            markModified();
+          }
+        };
+      }
+
+      const value = Reflect.get(target, prop);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+
+  return proxy;
+}
 
 export function createMapProxy<K, V>(state: HMapState<K, V>): Map<K, V> {
   if (state.isDraft) {
@@ -233,14 +305,59 @@ export function produceMap<K, V>(
   base: Map<K, V>,
   recipe: (draft: Map<K, V>) => void
 ): Map<K, V> {
-  let baseMap: HMap<K, V>;
-  let baseOrdered: OrderIndex<K> | null = null;
   const baseState = MAP_STATE_ENV.get(base as any);
+  const isBaseProxy = !!baseState;
+  const baseSize = isBaseProxy ? baseState.map.size : base.size;
+
+  // Case 1: native small → native (Immer-like approach)
+  if (!isBaseProxy && baseSize < MAP_ADAPTIVE_THRESHOLD) {
+    const draftData = new Map(base); // shallow copy
+    let modified = false;
+    const valueProxies = new Map<K, any>();
+
+    const draft = createNativeMapDraftProxy(draftData, () => { modified = true; }, valueProxies);
+    recipe(draft);
+
+    // Finalize nested proxies
+    if (valueProxies.size > 0) {
+      for (const [key, nestedProxy] of valueProxies) {
+        const finalValue = extractNestedValue(nestedProxy);
+        if (finalValue !== draftData.get(key)) {
+          draftData.set(key, finalValue);
+          modified = true;
+        }
+      }
+    }
+
+    if (!modified) return base;
+
+    // Check result size: upgrade to HAMT if large
+    if (draftData.size >= MAP_ADAPTIVE_THRESHOLD) {
+      const hamt = hamtFromMap(draftData);
+      const ordered = orderFromBase(draftData);
+      const finalState: HMapState<K, V> = {
+        map: hamt,
+        isDraft: false,
+        owner: undefined,
+        modified: false,
+        ordered,
+      };
+      return createMapProxy<K, V>(finalState);
+    }
+
+    // Still small → return native
+    return draftData;
+  }
+
+  // Case 2 & 3: large native or already proxy → use HAMT
+  let baseMap: HMap<K, V>;
+  let baseOrdered: OrderIndex<K, V> | null = null;
   if (baseState) {
     baseMap = baseState.map;
     baseOrdered = baseState.ordered || null;
   } else {
     baseMap = hamtFromMap(base);
+    baseOrdered = orderFromBase(base);
   }
 
   const draftOwner: Owner = {};
@@ -255,6 +372,7 @@ export function produceMap<K, V>(
   const draft = createMapProxy<K, V>(draftState);
   recipe(draft);
 
+  // Finalize nested proxies
   if (draftState.valueProxies && draftState.valueProxies.size > 0) {
     for (const [key, nestedProxy] of draftState.valueProxies) {
       const finalVal = extractNestedValue(nestedProxy);
@@ -271,10 +389,28 @@ export function produceMap<K, V>(
     }
   }
 
-  if (!draftState.modified) {
-    return base;
+  if (!draftState.modified) return base;
+
+  // Case 4: Check result size - downgrade to native if small
+  if (draftState.map.size < MAP_ADAPTIVE_THRESHOLD) {
+    const result = new Map<K, V>();
+    if (draftState.ordered?.idxToVal) {
+      for (const [k, v] of orderEntryIter(draftState.ordered)) {
+        result.set(k, v);
+      }
+    } else if (draftState.ordered) {
+      for (const k of orderIter(draftState.ordered)) {
+        result.set(k, hamtGet(draftState.map, k) as V);
+      }
+    } else {
+      for (const [k, v] of hamtToEntries(draftState.map) as [K, V][]) {
+        result.set(k, v);
+      }
+    }
+    return result;
   }
 
+  // Still large → return HAMT proxy
   const finalState: HMapState<K, V> = {
     map: draftState.map,
     isDraft: false,
