@@ -12,6 +12,10 @@ const BITS = 5;
 const BRANCH_FACTOR = 1 << BITS;
 const MASK = BRANCH_FACTOR - 1;
 
+// Pre-allocated empty children array to slice from (avoids new Array().fill() allocations)
+const EMPTY_CHILDREN: null[] = new Array(BRANCH_FACTOR).fill(null);
+const createEmptyChildren = <T>(): (T | null)[] => EMPTY_CHILDREN.slice() as (T | null)[];
+
 type Owner = object | undefined;
 
 // =====================================================
@@ -1174,7 +1178,7 @@ function mergeLeaves<K, V>(
   const root: HNode<K, V> = {
     kind: 'node',
     owner,
-    children: new Array(BRANCH_FACTOR).fill(null),
+    children: createEmptyChildren<HChild<K, V>>(),
   };
   let node = root;
   let s = shift;
@@ -1187,7 +1191,7 @@ function mergeLeaves<K, V>(
       const child: HNode<K, V> = {
         kind: 'node',
         owner,
-        children: new Array(BRANCH_FACTOR).fill(null),
+        children: createEmptyChildren<HChild<K, V>>(),
       };
       node.children[idx1] = child;
       node = child;
@@ -1456,27 +1460,33 @@ function hamtFromMap<K, V>(m: Map<K, V>): HMap<K, V> {
   return map;
 }
 
-function hamtToEntries<K, V>(map: HMap<K, V>): [K, V][] {
-  const result: [K, V][] = [];
+// Generator-based iterator: O(1) space, no intermediate array
+function* hamtIter<K, V>(map: HMap<K, V>): IterableIterator<[K, V]> {
   const root = map.root;
-  if (!root) return result;
+  if (!root) return;
 
-  const walk = (node: HChild<K, V>) => {
+  const stack: HChild<K, V>[] = [root];
+  while (stack.length) {
+    const node = stack.pop()!;
     if (node.kind === 'leaf') {
-      result.push([node.key, node.value]);
+      yield [node.key, node.value];
     } else if (node.kind === 'collision') {
       for (const leaf of node.entries) {
-        result.push([leaf.key, leaf.value]);
+        yield [leaf.key, leaf.value];
       }
     } else {
-      for (const child of node.children) {
-        if (child) walk(child as HChild<K, V>);
+      // Push children in reverse for correct traversal order
+      for (let i = node.children.length - 1; i >= 0; i--) {
+        const c = node.children[i];
+        if (c) stack.push(c);
       }
     }
-  };
+  }
+}
 
-  walk(root);
-  return result;
+// Array-based (for compatibility with existing code that needs array)
+function hamtToEntries<K, V>(map: HMap<K, V>): [K, V][] {
+  return [...hamtIter(map)];
 }
 
 // =====================================================
@@ -1650,7 +1660,7 @@ function createMapProxy<K, V>(state: HMapState<K, V>): Map<K, V> {
         if (state.ordered) {
           yield* orderIter(state.ordered);
         } else {
-          for (const [k] of hamtToEntries(state.map) as [K, V][]) {
+          for (const [k] of hamtIter(state.map)) {
             yield k;
           }
         }
@@ -1873,8 +1883,8 @@ function createSetProxy<T>(state: HSetState<T>): Set<T> {
         if (state.ordered) {
           yield* orderIter(state.ordered);
         } else {
-          for (const [k] of hamtToEntries(state.map) as [T, true][]) {
-            yield k;
+          for (const [v] of hamtIter(state.map)) {
+            yield v;
           }
         }
       };
@@ -2110,7 +2120,7 @@ export function unpura<T>(value: T): T {
   if (value instanceof Map) {
     // Top-level HAMT Map
     const top = MAP_STATE_ENV.get(value as any);
-    if (top) return new Map(hamtToEntries(top.map)) as any as T;
+    if (top) return new Map(hamtIter(top.map)) as any as T;
 
     // Nested Map proxy
     const nested = (value as any)[NESTED_MAP_STATE] as NestedMapState<any, any> | undefined;
@@ -2124,8 +2134,8 @@ export function unpura<T>(value: T): T {
     const top = SET_STATE_ENV.get(value as any);
     if (top) {
       const s = new Set<T>();
-      for (const [k] of hamtToEntries(top.map) as [T, true][]) {
-        s.add(k);
+      for (const [k] of hamtIter(top.map)) {
+        s.add(k as T);
       }
       return s as any as T;
     }
