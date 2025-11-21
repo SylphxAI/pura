@@ -728,6 +728,44 @@ function vecToArray<T>(vec: Vec<T>): T[] {
   return arr;
 }
 
+// Generator for efficient Vec iteration (O(n) without repeated tree lookups)
+function* vecIter<T>(vec: Vec<T>): Generator<T, void, undefined> {
+  const { shift, root, tail, treeCount } = vec;
+
+  // Yield tree elements
+  if (treeCount > 0) {
+    const stack: { node: Node<T>; level: number; idx: number }[] = [{ node: root, level: shift, idx: 0 }];
+    let yielded = 0;
+
+    while (stack.length > 0 && yielded < treeCount) {
+      const frame = stack[stack.length - 1]!;
+      if (frame.level === 0) {
+        // Leaf node - yield elements
+        const leaf = frame.node.arr as T[];
+        while (frame.idx < leaf.length && yielded < treeCount) {
+          yield leaf[frame.idx++]!;
+          yielded++;
+        }
+        stack.pop();
+      } else {
+        // Internal node - descend
+        const children = frame.node.arr as Node<T>[];
+        if (frame.idx < children.length) {
+          const child = children[frame.idx++]!;
+          stack.push({ node: child, level: frame.level - BITS, idx: 0 });
+        } else {
+          stack.pop();
+        }
+      }
+    }
+  }
+
+  // Yield tail elements
+  for (let i = 0; i < tail.length; i++) {
+    yield tail[i]!;
+  }
+}
+
 // =====================================================
 // Array Proxy State & Handler
 // =====================================================
@@ -856,23 +894,30 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
         case Symbol.iterator:
           return function* () {
             const v = state.vec;
-            for (let i = 0; i < v.count; i++) {
-              const val = vecGet(v, i)!;
-              if (state.isDraft && val !== null && typeof val === 'object') {
-                let nested = state.proxies?.get(i);
-                if (!nested) {
-                  if (val instanceof Map) {
-                    nested = createNestedMapProxy(val as Map<any, any>, () => { state.modified = true; });
-                  } else if (val instanceof Set) {
-                    nested = createNestedSetProxy(val as Set<any>, () => { state.modified = true; });
-                  } else {
-                    nested = createNestedProxy(val, () => { state.modified = true; });
+            if (!state.isDraft) {
+              // Fast path: non-draft mode uses efficient tree traversal
+              yield* vecIter(v);
+            } else {
+              // Draft mode: need index tracking for nested proxy caching
+              let i = 0;
+              for (const val of vecIter(v)) {
+                if (val !== null && typeof val === 'object') {
+                  let nested = state.proxies?.get(i);
+                  if (!nested) {
+                    if (val instanceof Map) {
+                      nested = createNestedMapProxy(val as Map<any, any>, () => { state.modified = true; });
+                    } else if (val instanceof Set) {
+                      nested = createNestedSetProxy(val as Set<any>, () => { state.modified = true; });
+                    } else {
+                      nested = createNestedProxy(val, () => { state.modified = true; });
+                    }
+                    state.proxies!.set(i, nested);
                   }
-                  state.proxies!.set(i, nested);
+                  yield nested;
+                } else {
+                  yield val;
                 }
-                yield nested;
-              } else {
-                yield val;
+                i++;
               }
             }
           };
