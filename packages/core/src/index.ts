@@ -674,9 +674,25 @@ function vecGet<T>(vec: Vec<T>, index: number): T | undefined {
 }
 
 function vecFromArray<T>(arr: T[]): Vec<T> {
-  let vec = emptyVec<T>();
+  const len = arr.length;
+  if (len === 0) return emptyVec<T>();
+
+  // For small arrays, just fill tail
+  if (len <= BRANCH_FACTOR) {
+    return {
+      count: len,
+      shift: BITS,
+      root: { owner: undefined, arr: [] },
+      tail: arr.slice(),
+      treeCount: 0,
+    };
+  }
+
+  // Use simple push-based approach for correctness
+  // The tree structure is complex and push handles it correctly
   const owner: Owner = {};
-  for (let i = 0; i < arr.length; i++) {
+  let vec = emptyVec<T>();
+  for (let i = 0; i < len; i++) {
     vec = vecPush(vec, owner, arr[i]!);
   }
   return vec;
