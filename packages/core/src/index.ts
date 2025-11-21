@@ -1,90 +1,334 @@
 /**
- * Pura - High-performance data structures with dual modes
+ * Pura - High-performance persistent vector with dual modes
  *
  * Two modes:
  * 1. Mutable: const arr = pura([1,2,3]); arr.push(4) // direct mutation
  * 2. Immutable: const b = produce(arr, draft => draft.push(4)) // structural sharing
  *
- * Both modes use efficient tree structure internally
+ * Uses bit-partitioned vector trie (like Clojure) for O(log₃₂ n) operations
  * Type is always T[] (Proxy-based)
  */
 
 // ===== Tree Configuration =====
 const BITS = 5;
 const BRANCH_FACTOR = 1 << BITS;  // 32
+const MASK = BRANCH_FACTOR - 1;   // 0x1F
 
 // ===== Internal tracking =====
 const TREE_STATE = new WeakMap<any[], TreeState<any>>();
+const PROXY_STATE_REF = new WeakMap<any[], { current: TreeState<any> }>();
 
 interface TreeState<T> {
   root: TreeNode<T>;
   length: number;
+  shift: number;  // Current tree depth in bits (0 = leaf only, 5 = 1 level, 10 = 2 levels, etc.)
+  tail: T[];      // Tail optimization: last chunk stored separately for fast push
 }
 
 interface TreeNode<T> {
-  items?: T[];
-  children?: TreeNode<T>[];
-  size: number;
+  children: (TreeNode<T> | T[] | undefined)[];
 }
 
-// ===== Internal: Create efficient array =====
-function createEfficientArray<T>(items: T[]): T[] {
-  const state: TreeState<T> = {
-    root: createLeaf(items),
-    length: items.length
+// ===== Bit-partitioned Vector Trie Operations =====
+
+function newPath<T>(level: number, node: TreeNode<T> | T[]): TreeNode<T> {
+  if (level === 0) {
+    return { children: [node] };
+  }
+  return { children: [newPath(level - BITS, node)] };
+}
+
+function pushTail<T>(level: number, parent: TreeNode<T>, tailNode: T[], length: number): TreeNode<T> {
+  const subidx = ((length - 1) >>> level) & MASK;
+  const newChildren = parent.children.slice();
+
+  if (level === BITS) {
+    // At bottom level, insert tail directly
+    newChildren[subidx] = tailNode;
+  } else {
+    const child = parent.children[subidx] as TreeNode<T> | undefined;
+    if (child) {
+      newChildren[subidx] = pushTail(level - BITS, child, tailNode, length);
+    } else {
+      newChildren[subidx] = newPath(level - BITS, tailNode);
+    }
+  }
+
+  return { children: newChildren };
+}
+
+function getNode<T>(state: TreeState<T>, index: number): T {
+  // Check tail first (optimization for recent elements)
+  const tailOffset = state.length - state.tail.length;
+  if (index >= tailOffset) {
+    return state.tail[index - tailOffset]!;
+  }
+
+  // Navigate tree using bit-partition
+  let node: TreeNode<T> | T[] = state.root;
+  for (let level = state.shift; level > 0; level -= BITS) {
+    node = (node as TreeNode<T>).children[(index >>> level) & MASK]!;
+  }
+  return (node as T[])[(index & MASK)]!;
+}
+
+function setNode<T>(state: TreeState<T>, index: number, value: T): TreeState<T> {
+  const tailOffset = state.length - state.tail.length;
+
+  // Update in tail
+  if (index >= tailOffset) {
+    const newTail = state.tail.slice();
+    newTail[index - tailOffset] = value;
+    return { ...state, tail: newTail };
+  }
+
+  // Update in tree - path copying for structural sharing
+  const newRoot = setInTree(state.root, state.shift, index, value);
+  return { ...state, root: newRoot };
+}
+
+function setInTree<T>(node: TreeNode<T>, level: number, index: number, value: T): TreeNode<T> {
+  const newChildren = node.children.slice();
+  const subidx = (index >>> level) & MASK;
+
+  if (level === BITS) {
+    // One level above leaf - children are leaf arrays (T[])
+    const arr = (node.children[subidx] as T[]).slice();
+    arr[index & MASK] = value;
+    newChildren[subidx] = arr;
+  } else {
+    // Recurse deeper
+    newChildren[subidx] = setInTree(node.children[subidx] as TreeNode<T>, level - BITS, index, value);
+  }
+
+  return { children: newChildren };
+}
+
+function pushValue<T>(state: TreeState<T>, value: T): TreeState<T> {
+  // Room in tail?
+  if (state.tail.length < BRANCH_FACTOR) {
+    const newTail = state.tail.slice();
+    newTail.push(value);
+    return { ...state, length: state.length + 1, tail: newTail };
+  }
+
+  // Tail is full, need to push it into tree
+  const tailNode = state.tail;
+  let newRoot = state.root;
+  let newShift = state.shift;
+
+  // Tree overflow? Need new root level
+  if ((state.length >>> BITS) > (1 << state.shift)) {
+    newRoot = { children: [state.root, newPath(state.shift, tailNode)] };
+    newShift = state.shift + BITS;
+  } else {
+    newRoot = pushTail(state.shift, state.root, tailNode, state.length);
+  }
+
+  return {
+    root: newRoot,
+    length: state.length + 1,
+    shift: newShift,
+    tail: [value]
   };
+}
+
+function popValue<T>(state: TreeState<T>): { value: T; newState: TreeState<T> } | undefined {
+  if (state.length === 0) return undefined;
+
+  const value = state.tail.length > 0
+    ? state.tail[state.tail.length - 1]!
+    : getNode(state, state.length - 1);
+
+  if (state.tail.length > 1) {
+    // Just pop from tail
+    return {
+      value,
+      newState: { ...state, length: state.length - 1, tail: state.tail.slice(0, -1) }
+    };
+  }
+
+  if (state.length === 1) {
+    // Becoming empty
+    return {
+      value,
+      newState: { root: { children: [] }, length: 0, shift: 0, tail: [] }
+    };
+  }
+
+  // Need to pull new tail from tree
+  const newTailOffset = state.length - BRANCH_FACTOR - 1;
+  const newTail = getLeafArray(state, newTailOffset);
+  const newRoot = popTail(state.shift, state.root, state.length - 1);
+
+  // Check if we can reduce tree height
+  let finalRoot = newRoot;
+  let finalShift = state.shift;
+  if (state.shift > 0 && newRoot.children.length === 1) {
+    finalRoot = newRoot.children[0] as TreeNode<T>;
+    finalShift = state.shift - BITS;
+  }
+
+  return {
+    value,
+    newState: { root: finalRoot, length: state.length - 1, shift: finalShift, tail: newTail }
+  };
+}
+
+function getLeafArray<T>(state: TreeState<T>, index: number): T[] {
+  let node: TreeNode<T> | T[] = state.root;
+  for (let level = state.shift; level > 0; level -= BITS) {
+    node = (node as TreeNode<T>).children[(index >>> level) & MASK]!;
+  }
+  return (node as T[]).slice();
+}
+
+function popTail<T>(level: number, node: TreeNode<T>, length: number): TreeNode<T> {
+  const subidx = ((length - 1) >>> level) & MASK;
+
+  if (level > BITS) {
+    const newChild = popTail(level - BITS, node.children[subidx] as TreeNode<T>, length);
+    if (newChild.children.length === 0 && subidx === 0) {
+      return { children: [] };
+    }
+    const newChildren = node.children.slice();
+    newChildren[subidx] = newChild;
+    return { children: newChildren };
+  }
+
+  // At bottom level
+  if (subidx === 0) {
+    return { children: [] };
+  }
+  return { children: node.children.slice(0, subidx) };
+}
+
+// ===== Create state from array =====
+function createStateFromArray<T>(items: T[]): TreeState<T> {
+  if (items.length === 0) {
+    return { root: { children: [] }, length: 0, shift: 0, tail: [] };
+  }
+
+  if (items.length <= BRANCH_FACTOR) {
+    // Small array - just use tail
+    return { root: { children: [] }, length: items.length, shift: 0, tail: items.slice() };
+  }
+
+  // Build tree from chunks
+  const tailStart = items.length - ((items.length - 1) % BRANCH_FACTOR) - 1;
+  const tail = items.slice(tailStart);
+
+  // Build leaf nodes
+  const leaves: T[][] = [];
+  for (let i = 0; i < tailStart; i += BRANCH_FACTOR) {
+    leaves.push(items.slice(i, Math.min(i + BRANCH_FACTOR, tailStart)));
+  }
+
+  if (leaves.length === 0) {
+    return { root: { children: [] }, length: items.length, shift: 0, tail };
+  }
+
+  // Build tree bottom-up
+  let nodes: (TreeNode<T> | T[])[] = leaves;
+  let shift = 0;
+
+  while (nodes.length > 1) {
+    shift += BITS;
+    const newNodes: TreeNode<T>[] = [];
+    for (let i = 0; i < nodes.length; i += BRANCH_FACTOR) {
+      newNodes.push({ children: nodes.slice(i, Math.min(i + BRANCH_FACTOR, nodes.length)) });
+    }
+    nodes = newNodes;
+  }
+
+  return { root: nodes[0] as TreeNode<T>, length: items.length, shift, tail };
+}
+
+// ===== Convert state to array =====
+function stateToArray<T>(state: TreeState<T>): T[] {
+  if (state.length === 0) return [];
+
+  const result = new Array<T>(state.length);
+  const tailOffset = state.length - state.tail.length;
+
+  // Fill from tree
+  fillFromNode(state.root, state.shift, 0, result, tailOffset);
+
+  // Fill from tail
+  for (let i = 0; i < state.tail.length; i++) {
+    result[tailOffset + i] = state.tail[i]!;
+  }
+
+  return result;
+}
+
+function fillFromNode<T>(node: TreeNode<T> | T[], level: number, offset: number, result: T[], maxIndex: number): void {
+  if (level === 0) {
+    // Leaf array
+    const arr = node as T[];
+    for (let i = 0; i < arr.length && offset + i < maxIndex; i++) {
+      result[offset + i] = arr[i]!;
+    }
+    return;
+  }
+
+  const treeNode = node as TreeNode<T>;
+  let childOffset = offset;
+  const childSize = 1 << level;
+
+  for (let i = 0; i < treeNode.children.length; i++) {
+    const child = treeNode.children[i];
+    if (child && childOffset < maxIndex) {
+      fillFromNode(child as TreeNode<T> | T[], level - BITS, childOffset, result, maxIndex);
+    }
+    childOffset += childSize;
+  }
+}
+
+// ===== Create proxy from state =====
+function createProxyFromState<T>(state: TreeState<T>): T[] {
+  // Wrap state in object so proxy can mutate it
+  const stateRef = { current: state };
 
   const proxy = new Proxy([] as T[], {
     get(_, prop) {
-      // Numeric index: arr[0]
+      const s = stateRef.current;
+
+      // Numeric index
       if (typeof prop === 'string') {
         const index = Number(prop);
-        if (!Number.isNaN(index) && index >= 0 && index < state.length) {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            return state.root.items[index];
-          }
-          return treeGet(state.root, index);
+        if (!Number.isNaN(index) && index >= 0 && index < s.length) {
+          return getNode(s, index);
         }
       }
 
-      // length
-      if (prop === 'length') return state.length;
+      if (prop === 'length') return s.length;
 
       // Mutable operations
       if (prop === 'push') {
         return (...items: T[]) => {
           for (const item of items) {
-            state.root = treePush(state.root, item);
-            state.length++;
+            stateRef.current = pushValue(stateRef.current, item);
           }
-          return state.length;
+          return stateRef.current.length;
         };
       }
 
       if (prop === 'pop') {
         return () => {
-          if (state.length === 0) return undefined;
-          const lastItem = treeGet(state.root, state.length - 1);
-          state.root = treePop(state.root);
-          state.length--;
-          return lastItem;
+          const result = popValue(stateRef.current);
+          if (!result) return undefined;
+          stateRef.current = result.newState;
+          return result.value;
         };
       }
 
-      // All native array methods
+      // Array methods - use tail fast path when possible
       if (prop === 'map') {
         return <U>(fn: (item: T, index: number) => U): U[] => {
-          const result: U[] = [];
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              result.push(fn(state.root.items[i]!, i));
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              result.push(fn(treeGet(state.root, i)!, i));
-            }
+          const result: U[] = new Array(s.length);
+          for (let i = 0; i < s.length; i++) {
+            result[i] = fn(getNode(s, i), i);
           }
           return result;
         };
@@ -93,17 +337,9 @@ function createEfficientArray<T>(items: T[]): T[] {
       if (prop === 'filter') {
         return (fn: (item: T, index: number) => boolean): T[] => {
           const result: T[] = [];
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              const item = state.root.items[i]!;
-              if (fn(item, i)) result.push(item);
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              const item = treeGet(state.root, i)!;
-              if (fn(item, i)) result.push(item);
-            }
+          for (let i = 0; i < s.length; i++) {
+            const item = getNode(s, i);
+            if (fn(item, i)) result.push(item);
           }
           return result;
         };
@@ -111,15 +347,8 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'forEach') {
         return (fn: (item: T, index: number) => void): void => {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              fn(state.root.items[i]!, i);
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              fn(treeGet(state.root, i)!, i);
-            }
+          for (let i = 0; i < s.length; i++) {
+            fn(getNode(s, i), i);
           }
         };
       }
@@ -127,15 +356,8 @@ function createEfficientArray<T>(items: T[]): T[] {
       if (prop === 'reduce') {
         return <U>(fn: (acc: U, item: T, index: number) => U, initialValue: U): U => {
           let acc = initialValue;
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              acc = fn(acc, state.root.items[i]!, i);
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              acc = fn(acc, treeGet(state.root, i)!, i);
-            }
+          for (let i = 0; i < s.length; i++) {
+            acc = fn(acc, getNode(s, i), i);
           }
           return acc;
         };
@@ -143,17 +365,9 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'find') {
         return (fn: (item: T, index: number) => boolean): T | undefined => {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              const item = state.root.items[i]!;
-              if (fn(item, i)) return item;
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              const item = treeGet(state.root, i)!;
-              if (fn(item, i)) return item;
-            }
+          for (let i = 0; i < s.length; i++) {
+            const item = getNode(s, i);
+            if (fn(item, i)) return item;
           }
           return undefined;
         };
@@ -161,15 +375,8 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'findIndex') {
         return (fn: (item: T, index: number) => boolean): number => {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              if (fn(state.root.items[i]!, i)) return i;
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              if (fn(treeGet(state.root, i)!, i)) return i;
-            }
+          for (let i = 0; i < s.length; i++) {
+            if (fn(getNode(s, i), i)) return i;
           }
           return -1;
         };
@@ -177,15 +384,8 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'includes') {
         return (searchElement: T): boolean => {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              if (state.root.items[i] === searchElement) return true;
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              if (treeGet(state.root, i) === searchElement) return true;
-            }
+          for (let i = 0; i < s.length; i++) {
+            if (getNode(s, i) === searchElement) return true;
           }
           return false;
         };
@@ -193,15 +393,8 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'indexOf') {
         return (searchElement: T): number => {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              if (state.root.items[i] === searchElement) return i;
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              if (treeGet(state.root, i) === searchElement) return i;
-            }
+          for (let i = 0; i < s.length; i++) {
+            if (getNode(s, i) === searchElement) return i;
           }
           return -1;
         };
@@ -209,33 +402,26 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'slice') {
         return (start?: number, end?: number): T[] => {
-          return toArray(state).slice(start, end);
+          return stateToArray(s).slice(start, end);
         };
       }
 
       if (prop === 'concat') {
         return (...items: any[]): T[] => {
-          return toArray(state).concat(...items);
+          return stateToArray(s).concat(...items);
         };
       }
 
       if (prop === 'join') {
         return (separator?: string): string => {
-          return toArray(state).join(separator);
+          return stateToArray(s).join(separator);
         };
       }
 
       if (prop === 'some') {
         return (fn: (item: T, index: number) => boolean): boolean => {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              if (fn(state.root.items[i]!, i)) return true;
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              if (fn(treeGet(state.root, i)!, i)) return true;
-            }
+          for (let i = 0; i < s.length; i++) {
+            if (fn(getNode(s, i), i)) return true;
           }
           return false;
         };
@@ -243,15 +429,8 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'every') {
         return (fn: (item: T, index: number) => boolean): boolean => {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              if (!fn(state.root.items[i]!, i)) return false;
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              if (!fn(treeGet(state.root, i)!, i)) return false;
-            }
+          for (let i = 0; i < s.length; i++) {
+            if (!fn(getNode(s, i), i)) return false;
           }
           return true;
         };
@@ -260,58 +439,52 @@ function createEfficientArray<T>(items: T[]): T[] {
       // Iterator
       if (prop === Symbol.iterator) {
         return function* () {
-          // Fast path: Small arrays stored as single leaf
-          if (state.root.items && state.length < BRANCH_FACTOR) {
-            for (let i = 0; i < state.length; i++) {
-              yield state.root.items[i]!;
-            }
-          } else {
-            for (let i = 0; i < state.length; i++) {
-              yield treeGet(state.root, i)!;
-            }
+          for (let i = 0; i < s.length; i++) {
+            yield getNode(s, i);
           }
         };
       }
 
       if (prop === 'toString' || prop === 'toLocaleString') {
-        return () => toArray(state).toString();
+        return () => stateToArray(s).toString();
       }
 
       if (prop === Symbol.toStringTag) {
         return 'Array';
       }
 
-      // Custom inspect for console.log (Node.js/Bun)
       if (prop === 'inspect' || (typeof Symbol !== 'undefined' && prop === Symbol.for('nodejs.util.inspect.custom'))) {
-        return () => toArray(state);
+        return () => stateToArray(s);
       }
 
       return undefined;
     },
 
     set(_, prop, value) {
-      // Allow index assignment
       if (typeof prop === 'string') {
         const index = Number(prop);
         if (!Number.isNaN(index) && index >= 0) {
-          if (index < state.length) {
-            // Update existing index
-            // Fast path: Small arrays stored as single leaf
-            if (state.root.items && state.length < BRANCH_FACTOR) {
-              const newItems = state.root.items.slice();
-              newItems[index] = value;
-              state.root = createLeaf(newItems);
-            } else {
-              state.root = treeSet(state.root, index, value);
-            }
+          if (index < stateRef.current.length) {
+            stateRef.current = setNode(stateRef.current, index, value);
             return true;
           }
-          if (index === state.length) {
-            // Append at end
-            state.root = treePush(state.root, value);
-            state.length++;
+          if (index === stateRef.current.length) {
+            stateRef.current = pushValue(stateRef.current, value);
             return true;
           }
+        }
+      }
+
+      // Handle length assignment
+      if (prop === 'length') {
+        const newLen = Number(value);
+        if (!Number.isNaN(newLen) && newLen >= 0) {
+          while (stateRef.current.length > newLen) {
+            const result = popValue(stateRef.current);
+            if (!result) break;
+            stateRef.current = result.newState;
+          }
+          return true;
         }
       }
 
@@ -322,7 +495,7 @@ function createEfficientArray<T>(items: T[]): T[] {
       if (typeof prop === 'string') {
         const index = Number(prop);
         if (!Number.isNaN(index)) {
-          return index >= 0 && index < state.length;
+          return index >= 0 && index < stateRef.current.length;
         }
       }
       return prop === 'length';
@@ -330,96 +503,77 @@ function createEfficientArray<T>(items: T[]): T[] {
 
     ownKeys(target) {
       const keys: (string | symbol)[] = [];
-      for (let i = 0; i < state.length; i++) {
+      for (let i = 0; i < stateRef.current.length; i++) {
         keys.push(String(i));
       }
       keys.push('length');
-
-      // Include symbol properties from target (nodejs.util.inspect.custom, etc.)
       const targetSymbols = Object.getOwnPropertySymbols(target);
       for (const sym of targetSymbols) {
         keys.push(sym);
       }
-
       return keys;
     },
 
     getOwnPropertyDescriptor(target, prop) {
       if (prop === 'length') {
-        return { value: state.length, writable: true, enumerable: false, configurable: false };
+        return { value: stateRef.current.length, writable: true, enumerable: false, configurable: false };
       }
       if (typeof prop === 'string') {
         const index = Number(prop);
-        if (!Number.isNaN(index) && index >= 0 && index < state.length) {
-          // Fast path: Small arrays stored as single leaf
-          const value = (state.root.items && state.length < BRANCH_FACTOR)
-            ? state.root.items[index]
-            : treeGet(state.root, index);
-          return { value, writable: true, enumerable: true, configurable: true };
+        if (!Number.isNaN(index) && index >= 0 && index < stateRef.current.length) {
+          return { value: getNode(stateRef.current, index), writable: true, enumerable: true, configurable: true };
         }
       }
-
-      // Delegate to target for symbol properties and other properties
       const targetDesc = Object.getOwnPropertyDescriptor(target, prop);
-      if (targetDesc) {
-        return targetDesc;
-      }
-
+      if (targetDesc) return targetDesc;
       return undefined;
     }
   });
 
-  TREE_STATE.set(proxy, state);
-
-  // Add custom inspect for better console.log output
-  try {
-    const inspect = Symbol.for('nodejs.util.inspect.custom');
-    Object.defineProperty(proxy, inspect, {
-      value: () => toArray(state),
-      enumerable: false,
-      writable: false,
-      configurable: false
-    });
-  } catch (e) {
-    // Ignore if Symbol is not supported
-  }
+  // Store reference to stateRef so we can get current state
+  PROXY_STATE_REF.set(proxy, stateRef);
 
   return proxy;
 }
 
 // ===== Check if array is efficient =====
 function isEfficient<T>(arr: T[]): boolean {
-  return TREE_STATE.has(arr);
+  return PROXY_STATE_REF.has(arr);
 }
 
 function getState<T>(arr: T[]): TreeState<T> | undefined {
-  return TREE_STATE.get(arr);
+  const ref = PROXY_STATE_REF.get(arr);
+  return ref?.current;
 }
 
-// ===== Draft =====
+// ===== Draft for produce =====
 class Draft<T> {
   private modifications: Map<number, T> = new Map();
   private appends: T[] = [];
   private removed: Set<number> = new Set();
+  private _length: number;
 
   constructor(
-    private readonly state: TreeState<T>,
+    private state: TreeState<T>,
     private readonly base: T[]
-  ) {}
+  ) {
+    this._length = state.length;
+  }
 
   get(index: number): T | undefined {
+    if (index < 0 || index >= this._length) return undefined;
     if (this.removed.has(index)) return undefined;
 
     if (this.modifications.has(index)) {
       return this.modifications.get(index);
     }
 
-    const appendIndex = index - this.state.length;
-    if (appendIndex >= 0 && appendIndex < this.appends.length) {
-      return this.appends[appendIndex];
+    const originalLength = this.state.length;
+    if (index >= originalLength) {
+      return this.appends[index - originalLength];
     }
 
-    return treeGet(this.state.root, index);
+    return getNode(this.state, index);
   }
 
   set(index: number, value: T): void {
@@ -428,28 +582,35 @@ class Draft<T> {
     if (index < this.state.length) {
       this.modifications.set(index, value);
       this.removed.delete(index);
-    } else {
-      const appendIndex = index - this.state.length;
-      this.appends[appendIndex] = value;
+    } else if (index < this._length) {
+      this.appends[index - this.state.length] = value;
+    } else if (index === this._length) {
+      this.appends.push(value);
+      this._length++;
     }
   }
 
   push(...items: T[]): number {
     this.appends.push(...items);
-    return this.state.length + this.appends.length;
+    this._length += items.length;
+    return this._length;
   }
 
   pop(): T | undefined {
+    if (this._length === 0) return undefined;
+
     // Pop from appends first
     if (this.appends.length > 0) {
+      this._length--;
       return this.appends.pop();
     }
 
     // Pop from state - find last non-removed index
     for (let i = this.state.length - 1; i >= 0; i--) {
       if (!this.removed.has(i)) {
-        const value = treeGet(this.state.root, i);
+        const value = getNode(this.state, i);
         this.removed.add(i);
+        this._length--;
         return value;
       }
     }
@@ -458,7 +619,13 @@ class Draft<T> {
   }
 
   get length(): number {
-    return this.state.length + this.appends.length - this.removed.size;
+    return this._length;
+  }
+
+  set length(newLen: number) {
+    while (this._length > newLen) {
+      this.pop();
+    }
   }
 
   finalize(): T[] {
@@ -467,61 +634,56 @@ class Draft<T> {
       return this.base;
     }
 
-    let newRoot = this.state.root;
-    let newLength = this.state.length;
-
-    // Apply modifications
+    // Apply modifications with structural sharing
+    let newState = this.state;
     for (const [index, value] of this.modifications) {
-      newRoot = treeSet(newRoot, index, value);
+      newState = setNode(newState, index, value);
     }
 
     // Apply appends
     for (const item of this.appends) {
-      newRoot = treePush(newRoot, item);
-      newLength++;
+      newState = pushValue(newState, item);
     }
 
-    // Apply removals
-    for (const index of this.removed) {
-      if (index === newLength - 1) {
-        newRoot = treePop(newRoot);
-        newLength--;
+    // Apply removals (only tail pops supported efficiently)
+    const removedSorted = Array.from(this.removed).sort((a, b) => b - a);
+    for (const index of removedSorted) {
+      if (index === newState.length - 1) {
+        const result = popValue(newState);
+        if (result) newState = result.newState;
       }
     }
 
-    return createEfficientArray(toArray({ root: newRoot, length: newLength }));
+    // Create new proxy from state - TRUE STRUCTURAL SHARING!
+    return createProxyFromState(newState);
   }
 }
 
-// ===== PUBLIC API: pura() - Create efficient array =====
+// ===== PUBLIC API: pura() =====
 export function pura<T>(items: T[]): T[] {
-  // Already efficient? Return as-is
-  if (isEfficient(items)) {
-    return items;
-  }
-  // Native array -> create efficient array
-  return createEfficientArray([...items]);
+  if (isEfficient(items)) return items;
+  const state = createStateFromArray([...items]);
+  return createProxyFromState(state);
 }
 
-// ===== PUBLIC API: unpura() - Convert to native array =====
+// ===== PUBLIC API: unpura() =====
 export function unpura<T>(items: T[]): T[] {
-  // Already native? Return as-is
-  if (!isEfficient(items)) {
-    return items;
-  }
-  // Efficient array -> convert to native
+  if (!isEfficient(items)) return items;
   const state = getState(items)!;
-  return toArray(state);
+  return stateToArray(state);
 }
 
-// ===== PUBLIC API: produce() - Immutable updates with structural sharing =====
+// ===== PUBLIC API: produce() =====
 export function produce<T>(base: T[], recipe: (draft: T[]) => void): T[] {
   // Convert native array to efficient array if needed
+  let state: TreeState<T>;
   if (!isEfficient(base)) {
-    base = createEfficientArray([...base]);
+    state = createStateFromArray([...base]);
+    base = createProxyFromState(state);
+  } else {
+    state = getState(base)!;
   }
 
-  const state = getState(base)!;
   const draftObj = new Draft(state, base);
 
   const proxy = new Proxy([] as T[], {
@@ -537,7 +699,15 @@ export function produce<T>(base: T[], recipe: (draft: T[]) => void): T[] {
       if (prop === 'push') return (...items: T[]) => draftObj.push(...items);
       if (prop === 'pop') return () => draftObj.pop();
 
-      // Support all array methods on draft
+      // Iterator support
+      if (prop === Symbol.iterator) {
+        return function* () {
+          for (let i = 0; i < draftObj.length; i++) {
+            yield draftObj.get(i);
+          }
+        };
+      }
+
       if (prop === 'map') {
         return <U>(fn: (item: T, index: number) => U) => {
           const result: U[] = [];
@@ -567,6 +737,71 @@ export function produce<T>(base: T[], recipe: (draft: T[]) => void): T[] {
         };
       }
 
+      if (prop === 'find') {
+        return (fn: (item: T, index: number) => boolean) => {
+          for (let i = 0; i < draftObj.length; i++) {
+            const item = draftObj.get(i)!;
+            if (fn(item, i)) return item;
+          }
+          return undefined;
+        };
+      }
+
+      if (prop === 'findIndex') {
+        return (fn: (item: T, index: number) => boolean) => {
+          for (let i = 0; i < draftObj.length; i++) {
+            if (fn(draftObj.get(i)!, i)) return i;
+          }
+          return -1;
+        };
+      }
+
+      if (prop === 'some') {
+        return (fn: (item: T, index: number) => boolean) => {
+          for (let i = 0; i < draftObj.length; i++) {
+            if (fn(draftObj.get(i)!, i)) return true;
+          }
+          return false;
+        };
+      }
+
+      if (prop === 'every') {
+        return (fn: (item: T, index: number) => boolean) => {
+          for (let i = 0; i < draftObj.length; i++) {
+            if (!fn(draftObj.get(i)!, i)) return false;
+          }
+          return true;
+        };
+      }
+
+      if (prop === 'includes') {
+        return (searchElement: T) => {
+          for (let i = 0; i < draftObj.length; i++) {
+            if (draftObj.get(i) === searchElement) return true;
+          }
+          return false;
+        };
+      }
+
+      if (prop === 'indexOf') {
+        return (searchElement: T) => {
+          for (let i = 0; i < draftObj.length; i++) {
+            if (draftObj.get(i) === searchElement) return i;
+          }
+          return -1;
+        };
+      }
+
+      if (prop === 'reduce') {
+        return <U>(fn: (acc: U, item: T, index: number) => U, initialValue: U) => {
+          let acc = initialValue;
+          for (let i = 0; i < draftObj.length; i++) {
+            acc = fn(acc, draftObj.get(i)!, i);
+          }
+          return acc;
+        };
+      }
+
       return undefined;
     },
 
@@ -578,6 +813,10 @@ export function produce<T>(base: T[], recipe: (draft: T[]) => void): T[] {
           return true;
         }
       }
+      if (prop === 'length') {
+        draftObj.length = Number(value);
+        return true;
+      }
       return false;
     },
   });
@@ -586,152 +825,5 @@ export function produce<T>(base: T[], recipe: (draft: T[]) => void): T[] {
   return draftObj.finalize();
 }
 
-// ===== Tree Operations =====
-
-function createLeaf<T>(items: T[]): TreeNode<T> {
-  return { items, size: items.length };
-}
-
-function createBranch<T>(children: TreeNode<T>[]): TreeNode<T> {
-  let size = 0;
-  for (let i = 0; i < children.length; i++) {
-    size += children[i]!.size;
-  }
-  return { children, size };
-}
-
-function treeGet<T>(node: TreeNode<T>, index: number): T | undefined {
-  if (node.items) {
-    return node.items[index];
-  }
-
-  const children = node.children!;
-  let offset = 0;
-
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i]!;
-    const nextOffset = offset + child.size;
-
-    if (index < nextOffset) {
-      return treeGet(child, index - offset);
-    }
-
-    offset = nextOffset;
-  }
-
-  return undefined;
-}
-
-function toArray<T>(state: TreeState<T>): T[] {
-  const result = new Array(state.length);
-  treeToArray(state.root, result, 0);
-  return result;
-}
-
-function treeToArray<T>(node: TreeNode<T>, result: T[], offset: number): number {
-  if (node.items) {
-    for (let i = 0; i < node.items.length; i++) {
-      result[offset + i] = node.items[i]!;
-    }
-    return offset + node.items.length;
-  }
-
-  const children = node.children!;
-  let currentOffset = offset;
-
-  for (let i = 0; i < children.length; i++) {
-    currentOffset = treeToArray(children[i]!, result, currentOffset);
-  }
-
-  return currentOffset;
-}
-
-function treeSet<T>(node: TreeNode<T>, index: number, value: T): TreeNode<T> {
-  if (node.items) {
-    const newItems = node.items.slice();
-    newItems[index] = value;
-    return createLeaf(newItems);
-  }
-
-  const children = node.children!;
-  let offset = 0;
-
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i]!;
-    const nextOffset = offset + child.size;
-
-    if (index < nextOffset) {
-      const newChildren = children.slice();
-      newChildren[i] = treeSet(child, index - offset, value);
-      return createBranch(newChildren);
-    }
-
-    offset = nextOffset;
-  }
-
-  return node;
-}
-
-function treePush<T>(node: TreeNode<T>, value: T): TreeNode<T> {
-  if (node.items) {
-    const items = node.items;
-
-    if (items.length < BRANCH_FACTOR) {
-      const newItems = new Array(items.length + 1);
-      for (let i = 0; i < items.length; i++) {
-        newItems[i] = items[i];
-      }
-      newItems[items.length] = value;
-      return createLeaf(newItems);
-    }
-
-    return createBranch([node, createLeaf([value])]);
-  }
-
-  const children = node.children!;
-  const lastIndex = children.length - 1;
-  const lastChild = children[lastIndex]!;
-
-  if (lastChild.size < BRANCH_FACTOR) {
-    const newChildren = children.slice();
-    newChildren[lastIndex] = treePush(lastChild, value);
-    return createBranch(newChildren);
-  }
-
-  const newChildren = new Array(children.length + 1);
-  for (let i = 0; i < children.length; i++) {
-    newChildren[i] = children[i];
-  }
-  newChildren[children.length] = createLeaf([value]);
-  return createBranch(newChildren);
-}
-
-function treePop<T>(node: TreeNode<T>): TreeNode<T> {
-  if (node.items) {
-    const items = node.items;
-    if (items.length <= 1) {
-      return createLeaf([]);
-    }
-    return createLeaf(items.slice(0, -1));
-  }
-
-  const children = node.children!;
-  const lastIndex = children.length - 1;
-  const lastChild = children[lastIndex]!;
-
-  const newLastChild = treePop(lastChild);
-
-  if (newLastChild.size === 0) {
-    if (children.length === 1) {
-      return createLeaf([]);
-    }
-    return createBranch(children.slice(0, -1));
-  }
-
-  const newChildren = children.slice();
-  newChildren[lastIndex] = newLastChild;
-  return createBranch(newChildren);
-}
-
 // Version
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
