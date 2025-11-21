@@ -12,31 +12,6 @@ const BITS = 5;
 const BRANCH_FACTOR = 1 << BITS;
 const MASK = BRANCH_FACTOR - 1;
 
-// =====================================================
-// Transient Node Pool - Safe recycling during produce()
-// =====================================================
-// Only used during transient operations (owner !== undefined)
-// where we know nodes won't be shared across versions
-
-const TRANSIENT_POOL: any[][] = [];
-const TRANSIENT_POOL_MAX = 64;
-
-function transientAlloc(size: number): any[] {
-  const arr = TRANSIENT_POOL.pop();
-  if (arr) {
-    arr.length = size;
-    return arr;
-  }
-  return new Array(size);
-}
-
-function transientFree(arr: any[]): void {
-  if (TRANSIENT_POOL.length < TRANSIENT_POOL_MAX) {
-    arr.length = 0; // Clear references
-    TRANSIENT_POOL.push(arr);
-  }
-}
-
 // Popcount helper for CHAMP bitmap operations
 function popcount(x: number): number {
   x -= (x >>> 1) & 0x55555555;
@@ -800,7 +775,6 @@ interface PuraArrayState<T> {
   isDraft: boolean;
   owner?: Owner;
   modified: boolean;
-  fallback?: T[];
   proxies?: Map<number, any>;
   cachedLeaf?: T[];
   cachedLeafStart?: number;
@@ -851,12 +825,6 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
 
   const proxy = new Proxy([] as T[], {
     get(target, prop, receiver) {
-      if (state.fallback) {
-        const val = Reflect.get(state.fallback, prop, receiver);
-        if (typeof val === 'function') return val.bind(state.fallback);
-        return val;
-      }
-
       if (prop === '__PURA_STATE__') return state;
       if (prop === 'length') return state.vec.count;
 
@@ -1190,9 +1158,9 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             }
             for (const arg of args) {
               if (Array.isArray(arg)) {
-                // If arg is a Pura array, use vecIter if available
+                // If arg is a Pura array, use vecIter for efficiency
                 const argState = ARRAY_STATE_ENV.get(arg);
-                if (argState && !argState.fallback) {
+                if (argState) {
                   for (const v of vecIter(argState.vec)) {
                     result.push(v);
                   }
@@ -1214,9 +1182,8 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             const flatten = (arr: Iterable<any>, d: number) => {
               for (const v of arr) {
                 if (d > 0 && Array.isArray(v)) {
-                  // Check if Pura array
                   const vState = ARRAY_STATE_ENV.get(v);
-                  if (vState && !vState.fallback) {
+                  if (vState) {
                     flatten(vecIter(vState.vec), d - 1);
                   } else {
                     flatten(v, d - 1);
@@ -1237,9 +1204,8 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             for (const v of vecIter(state.vec)) {
               const mapped = fn.call(thisArg, v, i++, proxy);
               if (Array.isArray(mapped)) {
-                // Check if Pura array
                 const mState = ARRAY_STATE_ENV.get(mapped);
-                if (mState && !mState.fallback) {
+                if (mState) {
                   for (const m of vecIter(mState.vec)) {
                     result.push(m);
                   }
@@ -1387,7 +1353,7 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
           return () => {
             if (state.vec.count === 0) return undefined;
             const first = vecGet(state.vec, 0);
-            // Rebuild vec without first element (O(n) but no fallback)
+            // Rebuild vec without first element
             const len = state.vec.count;
             let newVec = emptyVec<T>();
             const owner: Owner = {};
@@ -1404,7 +1370,7 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
         case 'unshift':
           return (...items: T[]) => {
             if (items.length === 0) return state.vec.count;
-            // Rebuild vec with items prepended (O(n) but no fallback)
+            // Rebuild vec with items prepended
             const len = state.vec.count;
             let newVec = emptyVec<T>();
             const owner: Owner = {};
@@ -1501,11 +1467,6 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
     },
 
     set(target, prop, value, receiver) {
-      if (state.fallback) {
-        state.modified = true;
-        return Reflect.set(state.fallback, prop, value, receiver);
-      }
-
       // Handle length assignment
       if (prop === 'length') {
         const newLen = Number(value);
@@ -1564,7 +1525,6 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
     },
 
     ownKeys() {
-      if (state.fallback) return Reflect.ownKeys(state.fallback);
       const keys: (string | symbol)[] = [];
       for (let i = 0; i < state.vec.count; i++) {
         keys.push(String(i));
@@ -1574,9 +1534,6 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
     },
 
     getOwnPropertyDescriptor(target, prop) {
-      if (state.fallback) {
-        return Reflect.getOwnPropertyDescriptor(state.fallback, prop);
-      }
       if (prop === 'length') {
         return {
           value: state.vec.count,
@@ -1600,7 +1557,6 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
     },
 
     has(target, prop) {
-      if (state.fallback) return prop in state.fallback;
       if (prop === 'length') return true;
       if (typeof prop === 'string') {
         const idx = Number(prop);
@@ -1615,15 +1571,8 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
 }
 
 function produceArray<T>(base: T[], recipe: (draft: T[]) => void): T[] {
-  let baseVec: Vec<T>;
   const baseState = ARRAY_STATE_ENV.get(base);
-  if (baseState) {
-    baseVec = baseState.fallback
-      ? vecFromArray(baseState.fallback)
-      : baseState.vec;
-  } else {
-    baseVec = vecFromArray(base);
-  }
+  const baseVec = baseState ? baseState.vec : vecFromArray(base);
 
   const draftOwner: Owner = {};
   const draftVec: Vec<T> = {
@@ -1660,16 +1609,12 @@ function produceArray<T>(base: T[], recipe: (draft: T[]) => void): T[] {
     }
   }
 
-  if (!draftState.modified && !draftState.fallback) {
+  if (!draftState.modified) {
     return base;
   }
 
-  const finalVec: Vec<T> = draftState.fallback
-    ? vecFromArray(draftState.fallback)
-    : draftState.vec;
-
   const finalState: PuraArrayState<T> = {
-    vec: finalVec,
+    vec: draftState.vec,
     isDraft: false,
     owner: undefined,
     modified: false,
@@ -2836,7 +2781,6 @@ export function unpura<T>(value: T): T {
   if (Array.isArray(value)) {
     const state = ARRAY_STATE_ENV.get(value as any[]);
     if (!state) return value;
-    if (state.fallback) return state.fallback as any as T;
     return vecToArray(state.vec) as any as T;
   }
 
