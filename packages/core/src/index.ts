@@ -12,6 +12,14 @@ const BITS = 5;
 const BRANCH_FACTOR = 1 << BITS;
 const MASK = BRANCH_FACTOR - 1;
 
+// Pre-generated string indices for ownKeys optimization
+const STRING_INDEX_CACHE_SIZE = 10000;
+const STRING_INDICES: string[] = Array.from({ length: STRING_INDEX_CACHE_SIZE }, (_, i) => String(i));
+
+function getStringIndex(i: number): string {
+  return i < STRING_INDEX_CACHE_SIZE ? STRING_INDICES[i]! : String(i);
+}
+
 // Popcount helper for CHAMP bitmap operations
 function popcount(x: number): number {
   x -= (x >>> 1) & 0x55555555;
@@ -1525,11 +1533,12 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
     },
 
     ownKeys() {
-      const keys: (string | symbol)[] = [];
-      for (let i = 0; i < state.vec.count; i++) {
-        keys.push(String(i));
+      const count = state.vec.count;
+      const keys: (string | symbol)[] = new Array(count + 1);
+      for (let i = 0; i < count; i++) {
+        keys[i] = getStringIndex(i);
       }
-      keys.push('length');
+      keys[count] = 'length';
       return keys;
     },
 
