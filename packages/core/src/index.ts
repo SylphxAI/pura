@@ -1313,17 +1313,17 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             const s = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
             const dc = deleteCount === undefined ? len - s : Math.max(0, deleteCount);
             const result: T[] = [];
-            // Copy before start
+            // Copy before start (use cache for sequential access)
             for (let i = 0; i < s; i++) {
-              result.push(vecGet(state.vec, i) as T);
+              result.push(vecGetCached(state, i) as T);
             }
             // Insert items
             for (const item of items) {
               result.push(item);
             }
-            // Copy after deleted portion
+            // Copy after deleted portion (use cache for sequential access)
             for (let i = s + dc; i < len; i++) {
-              result.push(vecGet(state.vec, i) as T);
+              result.push(vecGetCached(state, i) as T);
             }
             return result;
           };
@@ -1379,13 +1379,13 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
         case 'shift':
           return () => {
             if (state.vec.count === 0) return undefined;
-            const first = vecGet(state.vec, 0);
-            // Rebuild vec without first element
+            const first = vecGetCached(state, 0);
+            // Rebuild vec without first element (use cache for sequential read)
             const len = state.vec.count;
             let newVec = emptyVec<T>();
             const owner: Owner = {};
             for (let i = 1; i < len; i++) {
-              newVec = vecPush(newVec, owner, vecGet(state.vec, i) as T);
+              newVec = vecPush(newVec, owner, vecGetCached(state, i) as T);
             }
             state.vec = newVec;
             state.modified = true;
@@ -1422,26 +1422,26 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             const s = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
             const dc = deleteCount === undefined ? len - s : Math.max(0, Math.min(deleteCount, len - s));
 
-            // Collect deleted items
+            // Collect deleted items (use cache for sequential access)
             const deleted: T[] = [];
             for (let i = 0; i < dc; i++) {
-              deleted.push(vecGet(state.vec, s + i) as T);
+              deleted.push(vecGetCached(state, s + i) as T);
             }
 
             // Rebuild vec
             let newVec = emptyVec<T>();
             const owner: Owner = {};
-            // Copy items before start
+            // Copy items before start (use cache for sequential access)
             for (let i = 0; i < s; i++) {
-              newVec = vecPush(newVec, owner, vecGet(state.vec, i) as T);
+              newVec = vecPush(newVec, owner, vecGetCached(state, i) as T);
             }
             // Insert new items
             for (const item of items) {
               newVec = vecPush(newVec, owner, item);
             }
-            // Copy items after deleted section
+            // Copy items after deleted section (use cache for sequential access)
             for (let i = s + dc; i < len; i++) {
-              newVec = vecPush(newVec, owner, vecGet(state.vec, i) as T);
+              newVec = vecPush(newVec, owner, vecGetCached(state, i) as T);
             }
 
             state.vec = newVec;
