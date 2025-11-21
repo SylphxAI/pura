@@ -40,6 +40,10 @@ function createEfficientArray<T>(items: T[]): T[] {
       if (typeof prop === 'string') {
         const index = Number(prop);
         if (!Number.isNaN(index) && index >= 0 && index < state.length) {
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            return state.root.items[index];
+          }
           return treeGet(state.root, index);
         }
       }
@@ -72,8 +76,15 @@ function createEfficientArray<T>(items: T[]): T[] {
       if (prop === 'map') {
         return <U>(fn: (item: T, index: number) => U): U[] => {
           const result: U[] = [];
-          for (let i = 0; i < state.length; i++) {
-            result.push(fn(treeGet(state.root, i)!, i));
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              result.push(fn(state.root.items[i]!, i));
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              result.push(fn(treeGet(state.root, i)!, i));
+            }
           }
           return result;
         };
@@ -82,9 +93,17 @@ function createEfficientArray<T>(items: T[]): T[] {
       if (prop === 'filter') {
         return (fn: (item: T, index: number) => boolean): T[] => {
           const result: T[] = [];
-          for (let i = 0; i < state.length; i++) {
-            const item = treeGet(state.root, i)!;
-            if (fn(item, i)) result.push(item);
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              const item = state.root.items[i]!;
+              if (fn(item, i)) result.push(item);
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              const item = treeGet(state.root, i)!;
+              if (fn(item, i)) result.push(item);
+            }
           }
           return result;
         };
@@ -92,8 +111,15 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'forEach') {
         return (fn: (item: T, index: number) => void): void => {
-          for (let i = 0; i < state.length; i++) {
-            fn(treeGet(state.root, i)!, i);
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              fn(state.root.items[i]!, i);
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              fn(treeGet(state.root, i)!, i);
+            }
           }
         };
       }
@@ -101,8 +127,15 @@ function createEfficientArray<T>(items: T[]): T[] {
       if (prop === 'reduce') {
         return <U>(fn: (acc: U, item: T, index: number) => U, initialValue: U): U => {
           let acc = initialValue;
-          for (let i = 0; i < state.length; i++) {
-            acc = fn(acc, treeGet(state.root, i)!, i);
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              acc = fn(acc, state.root.items[i]!, i);
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              acc = fn(acc, treeGet(state.root, i)!, i);
+            }
           }
           return acc;
         };
@@ -110,9 +143,17 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'find') {
         return (fn: (item: T, index: number) => boolean): T | undefined => {
-          for (let i = 0; i < state.length; i++) {
-            const item = treeGet(state.root, i)!;
-            if (fn(item, i)) return item;
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              const item = state.root.items[i]!;
+              if (fn(item, i)) return item;
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              const item = treeGet(state.root, i)!;
+              if (fn(item, i)) return item;
+            }
           }
           return undefined;
         };
@@ -120,8 +161,15 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'findIndex') {
         return (fn: (item: T, index: number) => boolean): number => {
-          for (let i = 0; i < state.length; i++) {
-            if (fn(treeGet(state.root, i)!, i)) return i;
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              if (fn(state.root.items[i]!, i)) return i;
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              if (fn(treeGet(state.root, i)!, i)) return i;
+            }
           }
           return -1;
         };
@@ -129,8 +177,15 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'includes') {
         return (searchElement: T): boolean => {
-          for (let i = 0; i < state.length; i++) {
-            if (treeGet(state.root, i) === searchElement) return true;
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              if (state.root.items[i] === searchElement) return true;
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              if (treeGet(state.root, i) === searchElement) return true;
+            }
           }
           return false;
         };
@@ -138,8 +193,15 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'indexOf') {
         return (searchElement: T): number => {
-          for (let i = 0; i < state.length; i++) {
-            if (treeGet(state.root, i) === searchElement) return i;
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              if (state.root.items[i] === searchElement) return i;
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              if (treeGet(state.root, i) === searchElement) return i;
+            }
           }
           return -1;
         };
@@ -165,8 +227,15 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'some') {
         return (fn: (item: T, index: number) => boolean): boolean => {
-          for (let i = 0; i < state.length; i++) {
-            if (fn(treeGet(state.root, i)!, i)) return true;
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              if (fn(state.root.items[i]!, i)) return true;
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              if (fn(treeGet(state.root, i)!, i)) return true;
+            }
           }
           return false;
         };
@@ -174,8 +243,15 @@ function createEfficientArray<T>(items: T[]): T[] {
 
       if (prop === 'every') {
         return (fn: (item: T, index: number) => boolean): boolean => {
-          for (let i = 0; i < state.length; i++) {
-            if (!fn(treeGet(state.root, i)!, i)) return false;
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              if (!fn(state.root.items[i]!, i)) return false;
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              if (!fn(treeGet(state.root, i)!, i)) return false;
+            }
           }
           return true;
         };
@@ -184,8 +260,15 @@ function createEfficientArray<T>(items: T[]): T[] {
       // Iterator
       if (prop === Symbol.iterator) {
         return function* () {
-          for (let i = 0; i < state.length; i++) {
-            yield treeGet(state.root, i)!;
+          // Fast path: Small arrays stored as single leaf
+          if (state.root.items && state.length < BRANCH_FACTOR) {
+            for (let i = 0; i < state.length; i++) {
+              yield state.root.items[i]!;
+            }
+          } else {
+            for (let i = 0; i < state.length; i++) {
+              yield treeGet(state.root, i)!;
+            }
           }
         };
       }
@@ -213,7 +296,14 @@ function createEfficientArray<T>(items: T[]): T[] {
         if (!Number.isNaN(index) && index >= 0) {
           if (index < state.length) {
             // Update existing index
-            state.root = treeSet(state.root, index, value);
+            // Fast path: Small arrays stored as single leaf
+            if (state.root.items && state.length < BRANCH_FACTOR) {
+              const newItems = state.root.items.slice();
+              newItems[index] = value;
+              state.root = createLeaf(newItems);
+            } else {
+              state.root = treeSet(state.root, index, value);
+            }
             return true;
           }
           if (index === state.length) {
@@ -261,7 +351,11 @@ function createEfficientArray<T>(items: T[]): T[] {
       if (typeof prop === 'string') {
         const index = Number(prop);
         if (!Number.isNaN(index) && index >= 0 && index < state.length) {
-          return { value: treeGet(state.root, index), writable: true, enumerable: true, configurable: true };
+          // Fast path: Small arrays stored as single leaf
+          const value = (state.root.items && state.length < BRANCH_FACTOR)
+            ? state.root.items[index]
+            : treeGet(state.root, index);
+          return { value, writable: true, enumerable: true, configurable: true };
         }
       }
 
