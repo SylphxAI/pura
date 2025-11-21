@@ -1145,6 +1145,53 @@ function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
+        case 'flat':
+          return (depth = 1) => {
+            const result: any[] = [];
+            const flatten = (arr: Iterable<any>, d: number) => {
+              for (const v of arr) {
+                if (d > 0 && Array.isArray(v)) {
+                  // Check if Pura array
+                  const vState = ARRAY_STATE_ENV.get(v);
+                  if (vState && !vState.fallback) {
+                    flatten(vecIter(vState.vec), d - 1);
+                  } else {
+                    flatten(v, d - 1);
+                  }
+                } else {
+                  result.push(v);
+                }
+              }
+            };
+            flatten(vecIter(state.vec), depth);
+            return result;
+          };
+
+        case 'flatMap':
+          return (fn: (v: T, i: number, a: T[]) => any, thisArg?: any) => {
+            const result: any[] = [];
+            let i = 0;
+            for (const v of vecIter(state.vec)) {
+              const mapped = fn.call(thisArg, v, i++, proxy);
+              if (Array.isArray(mapped)) {
+                // Check if Pura array
+                const mState = ARRAY_STATE_ENV.get(mapped);
+                if (mState && !mState.fallback) {
+                  for (const m of vecIter(mState.vec)) {
+                    result.push(m);
+                  }
+                } else {
+                  for (const m of mapped) {
+                    result.push(m);
+                  }
+                }
+              } else {
+                result.push(mapped);
+              }
+            }
+            return result;
+          };
+
         case 'splice':
         case 'sort':
         case 'reverse':
