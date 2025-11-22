@@ -38,6 +38,38 @@ const updatedArray = [
 
 ## The Pura Solution
 
+### Returns Native JavaScript Types
+
+**Pura returns real Array/Object/Map/Set** - not custom wrappers like Immutable.js:
+
+```typescript
+import { produce } from '@sylphx/pura'
+
+const state = [1, 2, 3]
+const next = produce(state, draft => {
+  draft.push(4)
+})
+
+// next is a real Array
+next[0]              // ✅ works - real Array access
+next instanceof Array // ✅ true
+await api.send(next)  // ✅ works with any library
+
+// Compare to Immutable.js:
+// const state = List([1, 2, 3])
+// const next = state.push(4)
+// next.get(0)         // ❌ must use .get(), not [0]
+// next.toArray()      // ❌ must convert for interop
+```
+
+**Why this matters:**
+- ✅ **Zero learning curve** - use standard JavaScript methods
+- ✅ **100% library compatible** - works anywhere expecting native types
+- ✅ **No conversion overhead** - no `.toJS()` or `.toArray()` needed
+- ✅ **Perfect TypeScript inference** - types just work
+
+### Fast with Persistent Data Structures
+
 Pura uses **persistent data structures** to make immutability fast:
 
 ```typescript
@@ -92,11 +124,12 @@ For a 10,000-element array, updating index 500:
 
 | Feature | Immutable.js | Pura |
 |---------|-------------|------|
-| **API** | Separate (`.get()`, `.set()`) | Native JavaScript |
-| **TypeScript** | Poor inference | Perfect inference |
+| **Returns native types** | ❌ Custom `List`/`Map` wrappers | ✅ Real Array/Object/Map/Set |
+| **Library compatibility** | ❌ Must convert (`.toJS()`, `.toArray()`) | ✅ 100% compatible |
+| **Array access** | ❌ Must use `.get(index)` | ✅ Use `[index]` |
+| **TypeScript** | ⚠️ Poor inference | ✅ Perfect inference |
 | **Bundle size** | ~16KB gzipped | <8KB gzipped |
-| **Tree-shaking** | Poor | Excellent |
-| **Learning curve** | Steep | Minimal |
+| **Learning curve** | Steep (new API) | Minimal (standard JS) |
 
 ## Key Features
 

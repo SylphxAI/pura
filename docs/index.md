@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Pura
   text: Pure FP for TypeScript
-  tagline: Fast, Type-Safe, Zero Compromise. Make immutable updates faster than mutation.
+  tagline: Returns native JavaScript types. Immutability faster than mutation. Zero learning curve.
   image:
     src: /logo.svg
     alt: Pura Logo
@@ -17,15 +17,19 @@ hero:
       link: https://github.com/sylphxltd/pura
 
 features:
+  - icon: 🎯
+    title: Returns Native Types
+    details: Real Array/Object/Map/Set - not custom wrappers like Immutable.js. Works everywhere. Zero learning curve. 100% library compatible.
+
   - icon: ⚡
     title: Blazing Fast
     details: 1.06-105x faster than Immer. O(log n) operations with structural sharing via HAMT & RRB-Trees.
 
-  - icon: 🔒
-    title: Immutable by Design
-    details: Persistent data structures proven in Clojure/Scala. Copy-on-write ensures safety.
+  - icon: 🔄
+    title: Dual Mode Support
+    details: Use immutably with produce() or mutably when needed. Both patterns supported on the same data structures.
 
-  - icon: 🎯
+  - icon: 🔒
     title: Type-Safe
     details: Perfect TypeScript inference. Zero `any` types. Full type safety end-to-end.
 
@@ -53,27 +57,32 @@ features:
 ## Quick Example
 
 ```typescript
-import { produceFast } from 'pura'
+import { produce } from '@sylphx/pura'
 
-// Arrays - no wrapper needed!
+// Returns real Array - use it anywhere!
 const state = [1, 2, 3]
-const newState = produceFast(state, $ => {
-  $.set(0, 999)      // Update index
-  $.push(4)          // Add element
+const next = produce(state, draft => {
+  draft.push(4)
+  draft[0] = 999
 })
 
-// Objects - deep updates with path syntax
-const user = { name: 'John', profile: { age: 30 } }
-const updated = produceFast(user, $ => {
-  $.set(['profile', 'age'], 31)
+// next is a real Array
+next[0]              // ✅ works - it's a real Array
+next instanceof Array // ✅ true
+await api.send(next)  // ✅ works with any library
+
+// Objects - returns real Object
+const user = { name: 'John', age: 30 }
+const updated = produce(user, draft => {
+  draft.age = 31
 })
 
-// Maps & Sets
-const map = new Map([['a', 1], ['b', 2]])
-const newMap = produceFast(map, $ => {
-  $.set('c', 3)
-  $.delete('a')
+// Maps & Sets - returns real Map/Set
+const map = new Map([['a', 1]])
+const newMap = produce(map, draft => {
+  draft.set('b', 2)
 })
+newMap.get('b')      // ✅ works - it's a real Map
 ```
 
 ## Why Pura?
@@ -90,7 +99,7 @@ const newMap = produceFast(map, $ => {
 
 ### vs Immutable.js
 
-**Native API**. No learning curve. Better tree-shaking. TypeScript-first design.
+**Returns native types** (Immutable.js uses custom `List`/`Map` wrappers). Zero learning curve. Use `result[0]` not `result.get(0)`. Works with any library expecting native types.
 
 ## Performance
 

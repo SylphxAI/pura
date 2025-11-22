@@ -116,19 +116,47 @@ const newSet = produceFast(set, $ => {
 
 ## Key Concepts
 
+### Returns Native JavaScript Types
+
+**Pura returns real Array/Object/Map/Set** - not custom wrappers:
+
+```typescript
+import { produce } from '@sylphx/pura'
+
+const state = [1, 2, 3]
+const next = produce(state, draft => {
+  draft.push(4)
+})
+
+// next is a real Array - use it anywhere!
+next[0]              // ✅ works - real Array access
+next instanceof Array // ✅ true
+await api.send(next)  // ✅ works with any library
+
+// Compare to Immutable.js:
+// Must use .get(index), not [index]
+// Must convert with .toArray() for interop
+```
+
+**Why this matters:**
+- ✅ Zero learning curve - standard JavaScript methods
+- ✅ 100% library compatible - works everywhere
+- ✅ No conversion overhead - no `.toJS()` needed
+- ✅ Perfect TypeScript inference
+
 ### No Manual Wrapping Needed
 
 ```typescript
 // ❌ Don't do this
 const state = pura([1, 2, 3])
-const newState = produceFast(state, $ => $.push(4))
+const newState = produce(state, $ => $.push(4))
 
 // ✅ Do this - auto-converts!
 const state = [1, 2, 3]
-const newState = produceFast(state, $ => $.push(4))
+const newState = produce(state, $ => $.push(4))
 ```
 
-Both `produce()` and `produceFast()` automatically handle conversion.
+Both `produce()` and `pura()` automatically handle conversion.
 
 ### Adaptive Strategy
 
