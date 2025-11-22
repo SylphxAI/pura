@@ -1,16 +1,11 @@
 /**
  * Comprehensive Performance Benchmark
  *
- * Compares all mutation strategies across different data types and sizes:
+ * Compares three approaches for immutable mutations:
  *
- * **Direct Mutation:**
- * - Native (baseline)
- * - Pura (persistent data structure)
- *
- * **Immutable Mutation:**
- * - Native Copy (slice/spread + mutate)
- * - Produce (proxy-based)
- * - ProduceFast (mutation-collection)
+ * **Pura** (`produceFast`): Our persistent data structures
+ * **Immer** (`produce`): Industry-standard proxy-based immutability
+ * **Native**: Manual copying (spread/slice) + mutation
  *
  * **Data Types:**
  * - Array (small: 100, medium: 1K, large: 10K)
@@ -26,7 +21,8 @@
  */
 
 import { bench, describe } from 'vitest';
-import { pura, produce, produceFast } from '../packages/core/src/index';
+import { produce as immerProduce } from 'immer';
+import { pura, produceFast } from '../packages/core/src/index';
 
 // ============================================================
 // Test Data Sizes
@@ -53,18 +49,18 @@ describe('Array (Small: 100) - Single Update', () => {
     puraArr[50] = 999;
   });
 
-  // Immutable Mutation (all use puraArr as input)
+  // Immutable Mutation
   bench('[Immutable] Native Copy', () => {
-    const copy = puraArr.slice();
+    const copy = nativeArr.slice();
     copy[50] = 999;
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(puraArr, d => { d[50] = 999; });
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeArr, d => { d[50] = 999; });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(puraArr, $ => {
       $.set(50, 999);
     });
@@ -77,18 +73,18 @@ describe('Array (Small: 100) - Multiple Updates (10)', () => {
   const indices = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 
   bench('[Immutable] Native Copy', () => {
-    const copy = puraArr.slice();
+    const copy = nativeArr.slice();
     for (const idx of indices) copy[idx] = 999;
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(puraArr, d => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeArr, d => {
       for (const idx of indices) d[idx] = 999;
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(puraArr, $ => {
       for (const idx of indices) $.set(idx, 999);
     });
@@ -100,14 +96,14 @@ describe('Array (Small: 100) - Push', () => {
   const puraArr = pura(Array.from({ length: SMALL }, (_, i) => i));
 
   bench('[Immutable] Native Spread', () => {
-    return [...puraArr, 100];
+    return [...nativeArr, 100];
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(puraArr, d => { d.push(100); });
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeArr, d => { d.push(100); });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(puraArr, $ => {
       $.push(100);
     });
@@ -127,16 +123,16 @@ describe('Array (Medium: 1K) - Single Update', () => {
   });
 
   bench('[Immutable] Native Copy', () => {
-    const copy = puraArr.slice();
+    const copy = nativeArr.slice();
     copy[500] = 999;
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(puraArr, d => { d[500] = 999; });
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeArr, d => { d[500] = 999; });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(puraArr, $ => {
       $.set(500, 999);
     });
@@ -149,18 +145,18 @@ describe('Array (Medium: 1K) - Multiple Updates (10)', () => {
   const indices = [100, 200, 300, 400, 500, 600, 700, 800, 900, 999];
 
   bench('[Immutable] Native Copy', () => {
-    const copy = puraArr.slice();
+    const copy = nativeArr.slice();
     for (const idx of indices) copy[idx] = 999;
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(puraArr, d => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeArr, d => {
       for (const idx of indices) d[idx] = 999;
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(puraArr, $ => {
       for (const idx of indices) $.set(idx, 999);
     });
@@ -180,16 +176,16 @@ describe('Array (Large: 10K) - Single Update', () => {
   });
 
   bench('[Immutable] Native Copy', () => {
-    const copy = puraArr.slice();
+    const copy = nativeArr.slice();
     copy[5000] = 999;
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(puraArr, d => { d[5000] = 999; });
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeArr, d => { d[5000] = 999; });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(puraArr, $ => {
       $.set(5000, 999);
     });
@@ -202,18 +198,18 @@ describe('Array (Large: 10K) - Multiple Updates (100)', () => {
   const indices = Array.from({ length: 100 }, (_, i) => i * 100);
 
   bench('[Immutable] Native Copy', () => {
-    const copy = puraArr.slice();
+    const copy = nativeArr.slice();
     for (const idx of indices) copy[idx] = 999;
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(puraArr, d => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeArr, d => {
       for (const idx of indices) d[idx] = 999;
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(puraArr, $ => {
       for (const idx of indices) $.set(idx, 999);
     });
@@ -263,13 +259,13 @@ describe('Object - Single Shallow Update', () => {
     return { ...user, name: 'Jane Doe' };
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(user, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(user, draft => {
       draft.name = 'Jane Doe';
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(user, $ => {
       $.set(['name'], 'Jane Doe');
     });
@@ -283,14 +279,14 @@ describe('Object - Multiple Shallow Updates', () => {
     return { ...user, name: 'Jane Doe', age: 25 };
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(user, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(user, draft => {
       draft.name = 'Jane Doe';
       draft.age = 25;
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(user, $ => {
       $.set(['name'], 'Jane Doe');
       $.set(['age'], 25);
@@ -311,13 +307,13 @@ describe('Object - Single Deep Update', () => {
     };
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(user, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(user, draft => {
       draft.profile.bio = 'Updated bio';
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(user, $ => {
       $.set(['profile', 'bio'], 'Updated bio');
     });
@@ -343,8 +339,8 @@ describe('Object - Multiple Deep Updates', () => {
     };
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(user, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(user, draft => {
       draft.name = 'Jane Doe';
       draft.age = 25;
       draft.profile.bio = 'Updated bio';
@@ -352,7 +348,7 @@ describe('Object - Multiple Deep Updates', () => {
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(user, $ => {
       $.set(['name'], 'Jane Doe');
       $.set(['age'], 25);
@@ -376,13 +372,13 @@ describe('Map (Small: 100) - Single Set', () => {
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(nativeMap, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeMap, draft => {
       draft.set('key50', 999);
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(nativeMap, $ => {
       $.set('key50', 999);
     });
@@ -401,15 +397,15 @@ describe('Map (Small: 100) - Multiple Sets (10)', () => {
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(nativeMap, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeMap, draft => {
       for (let i = 0; i < 10; i++) {
         draft.set(`newKey${i}`, i);
       }
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(nativeMap, $ => {
       for (let i = 0; i < 10; i++) {
         $.set(`newKey${i}`, i);
@@ -428,13 +424,13 @@ describe('Map (Medium: 1K) - Single Set', () => {
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(nativeMap, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeMap, draft => {
       draft.set('key500', 999);
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(nativeMap, $ => {
       $.set('key500', 999);
     });
@@ -451,13 +447,13 @@ describe('Map (Medium: 1K) - Delete', () => {
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(nativeMap, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeMap, draft => {
       draft.delete('key500');
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(nativeMap, $ => {
       $.delete('key500');
     });
@@ -477,13 +473,13 @@ describe('Set (Small: 100) - Single Add', () => {
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(nativeSet, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeSet, draft => {
       draft.add(100);
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(nativeSet, $ => {
       $.add(100);
     });
@@ -501,15 +497,15 @@ describe('Set (Small: 100) - Multiple Adds (10)', () => {
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(nativeSet, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeSet, draft => {
       for (let i = 100; i < 110; i++) {
         draft.add(i);
       }
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(nativeSet, $ => {
       for (let i = 100; i < 110; i++) {
         $.add(i);
@@ -527,13 +523,13 @@ describe('Set (Medium: 1K) - Single Add', () => {
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(nativeSet, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeSet, draft => {
       draft.add(1000);
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(nativeSet, $ => {
       $.add(1000);
     });
@@ -549,13 +545,13 @@ describe('Set (Medium: 1K) - Delete', () => {
     return copy;
   });
 
-  bench('[Immutable] Produce', () => {
-    return produce(nativeSet, draft => {
+  bench('[Immutable] Immer', () => {
+    return immerProduce(nativeSet, draft => {
       draft.delete(500);
     });
   });
 
-  bench('[Immutable] ProduceFast', () => {
+  bench('[Immutable] Pura', () => {
     return produceFast(nativeSet, $ => {
       $.delete(500);
     });

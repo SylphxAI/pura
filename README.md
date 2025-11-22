@@ -34,26 +34,48 @@ bun add pura
 ```
 
 ```typescript
-import { IList, IMap } from 'pura'
+import { pura, produceFast } from 'pura'
 
-// Persistent List (32-way trie: O(log₃₂ n) ≈ O(1) operations)
-const list1 = IList.of(1, 2, 3)
-const list2 = list1.push(4)        // O(1) amortized ⚡
-const list3 = list2.set(0, 999)    // O(log₃₂ n) ≈ O(1) ⚡
-const list4 = list1.concat(list3)  // O(n) currently, O(log n) with RRB-Tree (coming soon)
+// Immutable array updates - Immer-like API with better performance
+const state = pura([1, 2, 3])
+const newState = produceFast(state, $ => {
+  $.set(0, 999)      // Update index 0
+  $.push(4)          // Add element
+})
 
-// Structural sharing: list1 and list2 share [1,2,3]
-list1 === list2  // false (different data)
-list1.get(0) === list2.get(0)  // true (same node reference)
+// Immutable object updates
+const user = pura({ name: 'John', age: 30, city: 'NYC' })
+const updated = produceFast(user, $ => {
+  $.set(['name'], 'Jane')    // Update single field
+  $.set(['age'], 31)         // Update another field
+})
 
-// Persistent Map (HAMT: O(1) operations)
-const map1 = IMap.of({ a: 1, b: 2 })
-const map2 = map1.set('c', 3)      // O(1) ⚡
-const map3 = map2.delete('a')      // O(1) ⚡
+// Deep nested updates
+const nested = pura({
+  profile: {
+    settings: {
+      theme: 'light',
+      notifications: true
+    }
+  }
+})
+const changed = produceFast(nested, $ => {
+  $.set(['profile', 'settings', 'theme'], 'dark')
+})
 
-// Convert to/from native JS
-const jsArray = list1.toArray()
-const jsList = IList.from(jsArray)
+// Map operations
+const map = new Map([['a', 1], ['b', 2]])
+const newMap = produceFast(map, $ => {
+  $.set('c', 3)       // Add entry
+  $.delete('a')       // Remove entry
+})
+
+// Set operations
+const set = new Set([1, 2, 3])
+const newSet = produceFast(set, $ => {
+  $.add(4)            // Add element
+  $.delete(1)         // Remove element
+})
 ```
 
 ---
@@ -64,37 +86,43 @@ const jsList = IList.from(jsArray)
 
 ```typescript
 // ❌ Naive immutable update (O(n) - copies entire array)
-const next = {
-  ...state,
-  items: [...state.items.slice(0, 500), newValue, ...state.items.slice(501)]
-}
+const items = [...state.items.slice(0, 500), newValue, ...state.items.slice(501)]
+const next = { ...state, items }
 
 // ✅ Pura (O(log n) - only copies path to changed node)
-const next = state.set('items', items => items.set(500, newValue))
+const next = produceFast(state, $ => {
+  $.set(['items', 500], newValue)
+})
 ```
 
-### vs Immer/Craft
+### vs Immer
 
 ```typescript
-// Immer/Craft: Proxy-based, good for small objects
-craft(state, draft => {
-  draft.items[500] = newValue  // Still O(n) - copies entire array
+// Immer: Proxy-based, good for objects, slower for collections
+import { produce } from 'immer'
+const next = produce(state, draft => {
+  draft.items[500] = newValue  // Still O(n) for arrays
 })
 
-// Pura: Persistent structures, scales to large collections
-state.items.set(500, newValue)  // O(log₃₂ 1000) ≈ 2 node copies
+// Pura: Persistent structures, faster for all scenarios
+import { produceFast } from 'pura'
+const next = produceFast(state, $ => {
+  $.set(['items', 500], newValue)  // O(log₃₂ n) for arrays
+})
 ```
 
 ### vs Immutable.js
 
 ```typescript
 // Immutable.js: Separate API, poor tree-shaking, 16KB
+import { List } from 'immutable'
 const list = List([1, 2, 3])
-list.push(4)  // Different API
+list.push(4)  // Different API, no TypeScript inference
 
 // Pura: Familiar API, excellent tree-shaking, <8KB
-const list = IList.of(1, 2, 3)
-list.push(4)  // Similar to Array
+import { pura, produceFast } from 'pura'
+const list = pura([1, 2, 3])
+produceFast(list, $ => $.push(4))  // Familiar API, perfect inference
 ```
 
 ---
