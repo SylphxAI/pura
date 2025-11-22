@@ -1,7 +1,7 @@
 {
-  "name": "@pura/core",
-  "version": "0.1.0",
-  "description": "Persistent data structures (HAMT, RRB-Tree) for TypeScript",
+  "name": "@sylphx/pura",
+  "version": "1.0.0",
+  "description": "Pure FP for TypeScript - Fast, Type-Safe, Zero Compromise. Persistent data structures (HAMT, RRB-Tree) that make immutability faster than mutation.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -12,14 +12,30 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "keywords": [
-    "persistent",
+    "functional",
     "immutable",
+    "persistent",
+    "pure-fp",
+    "typescript",
     "hamt",
     "rrb-tree",
-    "typescript"
+    "data-structures",
+    "immer-alternative",
+    "structural-sharing"
   ],
   "author": "SylphX Ltd",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SylphxAI/Pura.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://pura.sylphx.com",
+  "bugs": {
+    "url": "https://github.com/SylphxAI/Pura/issues"
+  }
 }

@@ -15,9 +15,13 @@
     "rrb-tree",
     "data-structures"
   ],
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sylphxltd/pura.git"
+    "url": "git+https://github.com/SylphxAI/Pura.git"
   },
   "scripts": {
     "build": "tsc --build",
@@ -30,10 +34,15 @@
     "typecheck": "tsc --noEmit",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/cli": "^2.29.7",
     "@types/node": "^22.10.2",
     "@vitest/coverage-v8": "^2.1.9",
     "immer": "^10.2.0",
