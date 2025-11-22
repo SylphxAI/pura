@@ -235,12 +235,12 @@ config:
 ---
 xychart-beta
     title "Array Multiple Updates (100 elements)"
-    x-axis ["Immer", "Pura", "Native Copy", "Native Direct"]
-    y-axis "Million ops/sec" 0 --> 65
-    bar [0.87, 4.63, 17.2, 63.7]
+    x-axis ["Immer", "Pura", "Native Copy"]
+    y-axis "Million ops/sec" 0 --> 18
+    bar [0.87, 4.63, 17.2]
 ```
 
-**Pura: 4.63M ops/s** | Immer: 0.87M ops/s | Native Copy: 17.2M ops/s | Native Direct: 63.7M ops/s
+**Pura: 4.63M ops/s** | Immer: 0.87M ops/s | Native Copy: 17.2M ops/s
 
 **Result**: Pura **5.3x faster than Immer** ✅
 
@@ -257,12 +257,12 @@ config:
 ---
 xychart-beta
     title "Array Multiple Updates (1K elements)"
-    x-axis ["Immer", "Native Copy", "Pura", "Native Direct"]
-    y-axis "Million ops/sec" 0 --> 70
-    bar [0.232, 0.025, 0.256, 67.8]
+    x-axis ["Immer", "Pura", "Native Copy"]
+    y-axis "Thousand ops/sec" 0 --> 270
+    bar [232, 256, 25]
 ```
 
-**Pura: 256K ops/s** | Immer: 232K ops/s | Native Copy: 25K ops/s | Native Direct: 67.8M ops/s
+**Pura: 256K ops/s** | Immer: 232K ops/s | Native Copy: 25K ops/s
 
 **Result**: Pura **1.1x faster than Immer** ✅, **10x faster than Native Copy** 🚀
 
@@ -279,12 +279,12 @@ config:
 ---
 xychart-beta
     title "Object Deep Updates (10 fields)"
-    x-axis ["Immer", "Pura", "Native Copy", "Native Direct"]
-    y-axis "Million ops/sec" 0 --> 190
-    bar [0.681, 1.70, 17.9, 189]
+    x-axis ["Immer", "Pura", "Native Copy"]
+    y-axis "Million ops/sec" 0 --> 19
+    bar [0.681, 1.70, 17.9]
 ```
 
-**Pura: 1.70M ops/s** | Immer: 681K ops/s | Native Copy: 17.9M ops/s | Native Direct: 189M ops/s
+**Pura: 1.70M ops/s** | Immer: 681K ops/s | Native Copy: 17.9M ops/s
 
 **Result**: Pura **2.5x faster than Immer** ✅
 
@@ -301,12 +301,12 @@ config:
 ---
 xychart-beta
     title "Map Set Operation (1K entries)"
-    x-axis ["Immer", "Native Copy", "Native Direct", "Pura"]
+    x-axis ["Immer", "Native Copy", "Pura"]
     y-axis "Thousand ops/sec" 0 --> 26
-    bar [2.08, 23.8, 23.9, 25.1]
+    bar [2.08, 23.8, 25.1]
 ```
 
-**Pura: 25.1K ops/s** | Immer: 2.08K ops/s | Native Copy: 23.8K ops/s | Native Direct: 23.9K ops/s
+**Pura: 25.1K ops/s** | Immer: 2.08K ops/s | Native Copy: 23.8K ops/s
 
 **Result**: Pura **12x faster than Immer** 🚀, **matches native performance**
 
@@ -323,12 +323,12 @@ config:
 ---
 xychart-beta
     title "Set Add Operation (1K elements)"
-    x-axis ["Immer", "Native Copy", "Native Direct", "Pura"]
+    x-axis ["Immer", "Native Copy", "Pura"]
     y-axis "Thousand ops/sec" 0 --> 245
-    bar [2.31, 236, 236, 243]
+    bar [2.31, 236, 243]
 ```
 
-**Pura: 243K ops/s** | Immer: 2.31K ops/s | Native Copy: 236K ops/s | Native Direct: 236K ops/s
+**Pura: 243K ops/s** | Immer: 2.31K ops/s | Native Copy: 236K ops/s
 
 **Result**: Pura **105x faster than Immer** 🚀, **matches native performance**
 
