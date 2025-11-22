@@ -372,13 +372,6 @@ export function isPura<T>(value: T): boolean {
 }
 
 /**
- * Re-wrap a value into optimized Pura representation.
- */
-export function repura<T>(value: T): T {
-  return pura(unpura(value));
-}
-
-/**
  * Immutable update with structural sharing.
  * - Array → Vec + transients
  * - Object → deep proxy

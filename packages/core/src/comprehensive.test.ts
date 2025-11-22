@@ -20,7 +20,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { pura, produce, unpura, isPura, repura } from './index';
+import { pura, produce, unpura, isPura } from './index';
 
 // ===== Core Design: Dual-Mode Arrays =====
 describe('Core Design: Dual-Mode (Mutable + Immutable)', () => {
@@ -1164,10 +1164,10 @@ describe('Helper Functions', () => {
     });
   });
 
-  describe('repura', () => {
+  describe('pura(unpura()) - Re-wrapping', () => {
     it('small arrays remain native', () => {
       const arr = [3, 1, 2];
-      const optimized = repura(arr);
+      const optimized = pura(unpura(arr));
 
       expect(optimized).toEqual([3, 1, 2]);
       expect(isPura(optimized)).toBe(false); // Small stays native
@@ -1175,7 +1175,7 @@ describe('Helper Functions', () => {
 
     it('large arrays become pura proxy', () => {
       const largeArr = Array.from({ length: 600 }, (_, i) => i);
-      const result = repura(largeArr);
+      const result = pura(unpura(largeArr));
 
       expect(result.length).toBe(600);
       expect(isPura(result)).toBe(true);
@@ -1183,12 +1183,12 @@ describe('Helper Functions', () => {
 
     it('converts native arrays (adaptive based on size)', () => {
       const small = [1, 2, 3];
-      const resultSmall = repura(small);
+      const resultSmall = pura(unpura(small));
       expect(resultSmall).toEqual([1, 2, 3]);
       expect(isPura(resultSmall)).toBe(false); // Small stays native
 
       const large = Array.from({ length: 600 }, (_, i) => i);
-      const resultLarge = repura(large);
+      const resultLarge = pura(unpura(large));
       expect(resultLarge.length).toBe(600);
       expect(isPura(resultLarge)).toBe(true); // Large becomes proxy
     });
