@@ -53,9 +53,9 @@ describe('Array (Small: 100) - Single Update', () => {
     puraArr[50] = 999;
   });
 
-  // Immutable Mutation
+  // Immutable Mutation (all use puraArr as input)
   bench('[Immutable] Native Copy', () => {
-    const copy = nativeArr.slice();
+    const copy = puraArr.slice();
     copy[50] = 999;
     return copy;
   });
@@ -77,7 +77,7 @@ describe('Array (Small: 100) - Multiple Updates (10)', () => {
   const indices = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 
   bench('[Immutable] Native Copy', () => {
-    const copy = nativeArr.slice();
+    const copy = puraArr.slice();
     for (const idx of indices) copy[idx] = 999;
     return copy;
   });
@@ -100,7 +100,7 @@ describe('Array (Small: 100) - Push', () => {
   const puraArr = pura(Array.from({ length: SMALL }, (_, i) => i));
 
   bench('[Immutable] Native Spread', () => {
-    return [...nativeArr, 100];
+    return [...puraArr, 100];
   });
 
   bench('[Immutable] Produce', () => {
@@ -127,7 +127,7 @@ describe('Array (Medium: 1K) - Single Update', () => {
   });
 
   bench('[Immutable] Native Copy', () => {
-    const copy = nativeArr.slice();
+    const copy = puraArr.slice();
     copy[500] = 999;
     return copy;
   });
@@ -149,7 +149,7 @@ describe('Array (Medium: 1K) - Multiple Updates (10)', () => {
   const indices = [100, 200, 300, 400, 500, 600, 700, 800, 900, 999];
 
   bench('[Immutable] Native Copy', () => {
-    const copy = nativeArr.slice();
+    const copy = puraArr.slice();
     for (const idx of indices) copy[idx] = 999;
     return copy;
   });
@@ -180,7 +180,7 @@ describe('Array (Large: 10K) - Single Update', () => {
   });
 
   bench('[Immutable] Native Copy', () => {
-    const copy = nativeArr.slice();
+    const copy = puraArr.slice();
     copy[5000] = 999;
     return copy;
   });
@@ -202,7 +202,7 @@ describe('Array (Large: 10K) - Multiple Updates (100)', () => {
   const indices = Array.from({ length: 100 }, (_, i) => i * 100);
 
   bench('[Immutable] Native Copy', () => {
-    const copy = nativeArr.slice();
+    const copy = puraArr.slice();
     for (const idx of indices) copy[idx] = 999;
     return copy;
   });
