@@ -97,7 +97,7 @@ export default defineConfig({
     ['meta', { property: 'og:title', content: 'Pura - Pure FP for TypeScript' }],
     ['meta', { property: 'og:description', content: 'Returns native JavaScript types. Immutability faster than mutation. Zero learning curve. 100% library compatible.' }],
     ['meta', { property: 'og:url', content: 'https://pura.sylphx.com' }],
-    ['meta', { property: 'og:image', content: 'https://pura.sylphx.com/og-image.png' }],
+    ['meta', { property: 'og:image', content: 'https://pura.sylphx.com/og-image.svg' }],
     ['meta', { property: 'og:image:width', content: '1200' }],
     ['meta', { property: 'og:image:height', content: '630' }],
     ['meta', { property: 'og:image:alt', content: 'Pura - Pure FP for TypeScript' }],
@@ -107,7 +107,7 @@ export default defineConfig({
     ['meta', { name: 'twitter:site', content: '@SylphxAI' }],
     ['meta', { name: 'twitter:title', content: 'Pura - Pure FP for TypeScript' }],
     ['meta', { name: 'twitter:description', content: 'Returns native JavaScript types. Immutability faster than mutation. Zero learning curve. 100% library compatible.' }],
-    ['meta', { name: 'twitter:image', content: 'https://pura.sylphx.com/og-image.png' }],
+    ['meta', { name: 'twitter:image', content: 'https://pura.sylphx.com/og-image.svg' }],
     ['meta', { name: 'twitter:image:alt', content: 'Pura - Pure FP for TypeScript' }],
   ]
 })
