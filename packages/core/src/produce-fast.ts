@@ -856,6 +856,57 @@ import { ARRAY_STATE_ENV, produceArray } from './internal/array-proxy';
 import { MAP_STATE_ENV, produceMap } from './internal/map-proxy';
 import { SET_STATE_ENV, produceSet } from './internal/set-proxy';
 
+// ===== Pre-created Helper Prototypes (Performance Optimization) =====
+// Helper objects are structurally identical for each type, only the draft changes.
+// By pre-creating prototypes and using Object.create(), we avoid object allocation overhead.
+
+const arrayHelperProto = {
+  set(this: any, index: number, value: any) {
+    this.__draft[index] = value;
+  },
+  delete(this: any, index: number) {
+    this.__draft.splice(index, 1);
+  },
+  push(this: any, ...items: any[]) {
+    this.__draft.push(...items);
+  },
+  splice(this: any, start: number, deleteCount: number = 0, ...items: any[]) {
+    this.__draft.splice(start, deleteCount, ...items);
+  },
+  filter(this: any, fn: (item: any, index: number) => boolean) {
+    const toKeep: any[] = [];
+    for (let i = 0; i < this.__draft.length; i++) {
+      if (fn(this.__draft[i], i)) toKeep.push(this.__draft[i]);
+    }
+    this.__draft.length = 0;
+    this.__draft.push(...toKeep);
+  }
+};
+
+const mapHelperProto = {
+  set(this: any, key: any, value: any) {
+    this.__draft.set(key, value);
+  },
+  delete(this: any, key: any) {
+    this.__draft.delete(key);
+  },
+  clear(this: any) {
+    this.__draft.clear();
+  }
+};
+
+const setHelperProto = {
+  add(this: any, value: any) {
+    this.__draft.add(value);
+  },
+  delete(this: any, value: any) {
+    this.__draft.delete(value);
+  },
+  clear(this: any) {
+    this.__draft.clear();
+  }
+};
+
 /**
  * ProduceFast: Immutable mutation without proxy tracking
  *
@@ -875,66 +926,28 @@ export function produceFast<T>(
 ): T {
   // Check if it's pura tree → delegate to produceArray/Map/Set for optimal performance
   if (Array.isArray(base) && ARRAY_STATE_ENV.has(base as any[])) {
-    // Pura array: use produceArray which has optimized tree operations
+    // Pura array: use produceArray with pre-created helper prototype
     return produceArray(base, (draft: any) => {
-      const helper: ArrayHelper<any> = {
-        set(index: number, value: any) {
-          draft[index] = value;
-        },
-        delete(index: number) {
-          draft.splice(index, 1);
-        },
-        push(...items: any[]) {
-          draft.push(...items);
-        },
-        splice(start: number, deleteCount: number = 0, ...items: any[]) {
-          draft.splice(start, deleteCount, ...items);
-        },
-        filter(fn: (item: any, index: number) => boolean) {
-          const toKeep: any[] = [];
-          for (let i = 0; i < draft.length; i++) {
-            if (fn(draft[i], i)) toKeep.push(draft[i]);
-          }
-          draft.length = 0;
-          draft.push(...toKeep);
-        }
-      };
+      const helper = Object.create(arrayHelperProto);
+      helper.__draft = draft;
       recipe(helper as any);
     }) as T;
   }
 
   if (base instanceof Map && MAP_STATE_ENV.has(base as any)) {
-    // Pura map: use produceMap
+    // Pura map: use produceMap with pre-created helper prototype
     return produceMap(base, (draft: any) => {
-      const helper: MapHelper<any, any> = {
-        set(key: any, value: any) {
-          draft.set(key, value);
-        },
-        delete(key: any) {
-          draft.delete(key);
-        },
-        clear() {
-          draft.clear();
-        }
-      };
+      const helper = Object.create(mapHelperProto);
+      helper.__draft = draft;
       recipe(helper as any);
     }) as T;
   }
 
   if (base instanceof Set && SET_STATE_ENV.has(base as any)) {
-    // Pura set: use produceSet
+    // Pura set: use produceSet with pre-created helper prototype
     return produceSet(base, (draft: any) => {
-      const helper: SetHelper<any> = {
-        add(value: any) {
-          draft.add(value);
-        },
-        delete(value: any) {
-          draft.delete(value);
-        },
-        clear() {
-          draft.clear();
-        }
-      };
+      const helper = Object.create(setHelperProto);
+      helper.__draft = draft;
       recipe(helper as any);
     }) as T;
   }
