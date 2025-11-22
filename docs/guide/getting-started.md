@@ -7,15 +7,15 @@ Get up and running with Pura in minutes.
 ::: code-group
 
 ```bash [npm]
-npm install pura
+npm install @sylphx/pura
 ```
 
 ```bash [bun]
-bun add pura
+bun add @sylphx/pura
 ```
 
 ```bash [pnpm]
-pnpm add pura
+pnpm add @sylphx/pura
 ```
 
 :::
@@ -29,7 +29,7 @@ Pura offers two APIs - choose based on your needs:
 **Option 1: `produceFast()` - Recommended** (1.06-105x faster than Immer)
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const state = [1, 2, 3]
 const newState = produceFast(state, $ => {
@@ -41,7 +41,7 @@ const newState = produceFast(state, $ => {
 **Option 2: `produce()` - Immer-Compatible** (for migration)
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const state = { items: [1, 2, 3] }
 const newState = produce(state, draft => {
@@ -54,7 +54,7 @@ const newState = produce(state, draft => {
 ### Arrays
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const todos = ['Buy milk', 'Walk dog']
 
@@ -77,7 +77,7 @@ const removed = produceFast(todos, $ => {
 ### Objects
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const user = {
   name: 'John',
@@ -97,7 +97,7 @@ const updated = produceFast(user, $ => {
 ### Maps & Sets
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 // Maps
 const map = new Map([['a', 1], ['b', 2]])
@@ -184,7 +184,7 @@ const result2 = produceFast(large, $ => $.set(500, 999))
 Perfect type inference out of the box:
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface User {
   name: string
@@ -213,7 +213,7 @@ const updated = produceFast(user, $ => {
 ### Redux Reducer
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const todosReducer = (state = [], action) => {
   switch (action.type) {
@@ -238,7 +238,7 @@ const todosReducer = (state = [], action) => {
 
 ```typescript
 import { useState } from 'react'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function TodoApp() {
   const [todos, setTodos] = useState([])
@@ -268,7 +268,7 @@ function TodoApp() {
 
 ```typescript
 import { create } from 'zustand'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const useStore = create((set) => ({
   todos: [],

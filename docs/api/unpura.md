@@ -13,7 +13,7 @@ function unpura<T>(value: T): T
 `unpura()` extracts the underlying data as native JavaScript structures:
 
 ```typescript
-import { unpura, produceFast, isPura } from 'pura'
+import { unpura, produceFast, isPura } from '@sylphx/pura'
 
 const large = Array.from({ length: 1000 }, (_, i) => i)
 const result = produceFast(large, $ => $.set(500, 999))

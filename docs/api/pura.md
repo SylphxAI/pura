@@ -13,7 +13,7 @@ function pura<T>(value: T): T
 `pura()` explicitly wraps a value in a persistent data structure:
 
 ```typescript
-import { pura } from 'pura'
+import { pura } from '@sylphx/pura'
 
 // Wrap array in RRB-Tree
 const puraArray = pura([1, 2, 3])
@@ -95,7 +95,7 @@ console.log(puraUser.name)  // ✅ Type-safe
 ### Manual Wrapping (Rarely Needed)
 
 ```typescript
-import { pura, produceFast } from 'pura'
+import { pura, produceFast } from '@sylphx/pura'
 
 // Explicitly wrap (usually unnecessary)
 const data = pura([1, 2, 3])
@@ -105,7 +105,7 @@ const next = produceFast(data, $ => $.push(4))
 ### Pre-wrapping for Reuse (Advanced)
 
 ```typescript
-import { pura } from 'pura'
+import { pura } from '@sylphx/pura'
 
 // Pre-wrap large dataset
 const largeData = pura(Array.from({ length: 10000 }, (_, i) => i))

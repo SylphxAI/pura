@@ -24,7 +24,7 @@ Complete API reference for Pura's immutable data structures.
 ### produceFast() - Recommended
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const next = produceFast(state, $ => {
   $.set(['items', 0], 999)    // Helper-based API
@@ -38,7 +38,7 @@ const next = produceFast(state, $ => {
 ### produce() - Immer-Compatible
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const next = produce(state, draft => {
   draft.items[0] = 999        // Direct mutation
@@ -157,7 +157,7 @@ See [Understanding Adaptive Strategy](/guide/understanding-adaptive) for details
 ### Redux Reducer
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const todosReducer = (state = [], action) => {
   switch (action.type) {
@@ -183,7 +183,7 @@ const todosReducer = (state = [], action) => {
 ### React State
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 import { useState } from 'react'
 
 function TodoApp() {
@@ -205,7 +205,7 @@ function TodoApp() {
 
 ```typescript
 import { create } from 'zustand'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const useStore = create((set) => ({
   items: [],
@@ -225,13 +225,13 @@ const useStore = create((set) => ({
 import { produce } from 'immer'
 
 // After
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 ```
 
 **Step 2 (optional):** Upgrade to `produceFast()` for maximum performance
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 // Before (Immer)
 const next = produce(state, draft => {

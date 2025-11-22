@@ -7,7 +7,7 @@ Real-world examples of working with nested objects in Pura.
 ### Update Basic Info
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface User {
   id: number
@@ -51,7 +51,7 @@ const darkMode = produceFast(user, $ => {
 ### Merge Settings
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function updateSettings(user: User, newSettings: Partial<User['profile']['settings']>): User {
   return produceFast(user, $ => {
@@ -69,7 +69,7 @@ const updated = updateSettings(user, {
 ### Update Multiple Fields
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function updateProfile(
   user: User,
@@ -94,7 +94,7 @@ const updated = updateProfile(user, {
 ### Complex State Tree
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface AppState {
   user: {
@@ -187,7 +187,7 @@ const setError = (state: AppState, error: string): AppState => {
 ### Form with Validation
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface FormState {
   values: {
@@ -262,7 +262,7 @@ function setSubmitting(form: FormState, submitting: boolean): FormState {
 ### Nested Configuration
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Config {
   api: {
@@ -331,7 +331,7 @@ const enableBetaFeature = (config: Config, feature: string): Config => {
 ### Normalized State
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface NormalizedState {
   entities: {
@@ -409,7 +409,7 @@ function deleteUser(state: NormalizedState, userId: number): NormalizedState {
 ### Merge Nested Objects
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface DeepObject {
   level1: {
@@ -453,7 +453,7 @@ const updated = produceFast(obj, $ => {
 ### Verify Unchanged Parts Reused
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const state = {
   user: {

@@ -7,9 +7,9 @@ Migrate from Immer to Pura in minutes and get **1.06-105x** performance boost.
 ### Step 1: Install Pura
 
 ```bash
-npm install pura
+npm install @sylphx/pura
 # or
-bun add pura
+bun add @sylphx/pura
 ```
 
 ### Step 2: Change Imports
@@ -19,7 +19,7 @@ bun add pura
 import { produce } from 'immer'
 
 // After (Pura) - same code, 1.06-105x faster!
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 ```
 
 **That's it!** Your existing code works unchanged.
@@ -51,7 +51,7 @@ const nextState = produce(baseState, draft => {
 ### After (Pura)
 
 ```typescript
-import { produce } from 'pura'  // ← Only this line changes!
+import { produce } from '@sylphx/pura'  // ← Only this line changes!
 
 const baseState = {
   users: [
@@ -91,7 +91,7 @@ const nextState = produce(state, draft => {
 ### After (Pura with produceFast)
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const nextState = produceFast(state, $ => {
   $.set(['items', 0], 999)
@@ -131,7 +131,7 @@ const todosReducer = (state = [], action) => {
 **After (Pura) - Same Code!**
 
 ```typescript
-import { produce } from 'pura'  // ← Only change
+import { produce } from '@sylphx/pura'  // ← Only change
 
 const todosReducer = (state = [], action) => {
   return produce(state, draft => {
@@ -151,7 +151,7 @@ const todosReducer = (state = [], action) => {
 **Or upgrade to produceFast():**
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const todosReducer = (state = [], action) => {
   switch (action.type) {
@@ -200,7 +200,7 @@ function TodoApp() {
 
 ```typescript
 import { useState } from 'react'
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 function TodoApp() {
   const [todos, setTodos] = useState([])
@@ -221,7 +221,7 @@ function TodoApp() {
 
 ```typescript
 import { useState } from 'react'
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 function useImmer(initialState) {
   const [state, setState] = useState(initialState)
@@ -284,7 +284,7 @@ const next = produce(state, draft => {
 Immer auto-freezes in development. Pura doesn't (for performance), but you can freeze manually:
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const next = produce(state, draft => {
   draft.items[0] = 999
@@ -336,7 +336,7 @@ Just change imports - code works unchanged:
 ```bash
 # Find and replace in your codebase
 # Before: import { produce } from 'immer'
-# After:  import { produce } from 'pura'
+# After:  import { produce } from '@sylphx/pura'
 ```
 
 **Pros:**
@@ -351,13 +351,13 @@ Just change imports - code works unchanged:
 
 1. **Phase 1**: Replace imports (instant)
    ```typescript
-   import { produce } from 'pura'
+   import { produce } from '@sylphx/pura'
    ```
 
 2. **Phase 2**: Upgrade hot paths to `produceFast()`
    ```typescript
    // High-traffic reducers
-   import { produceFast } from 'pura'
+   import { produceFast } from '@sylphx/pura'
    ```
 
 3. **Phase 3**: Migrate remaining code gradually
@@ -376,7 +376,7 @@ Keep Immer for existing code, use Pura for new code:
 import { produce } from 'immer'
 
 // New code - use Pura
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 ```
 
 **Pros:**
@@ -415,19 +415,19 @@ Ensure you're using the right API:
 
 ```typescript
 // ❌ Slower - using Immer's approach
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 const next = produce(state, draft => {
   draft.items = [...draft.items, newItem]  // Full copy!
 })
 
 // ✅ Faster - using Pura's approach
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 const next = produce(state, draft => {
   draft.items.push(newItem)  // Optimized!
 })
 
 // ✅ Fastest - using produceFast
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 const next = produceFast(state, $ => {
   $.push(['items'], newItem)
 })
@@ -438,7 +438,7 @@ const next = produceFast(state, $ => {
 Your existing Immer tests should pass without changes:
 
 ```typescript
-import { produce } from 'pura'  // ← Changed from 'immer'
+import { produce } from '@sylphx/pura'  // ← Changed from 'immer'
 
 describe('todos reducer', () => {
   it('should add todo', () => {

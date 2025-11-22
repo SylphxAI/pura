@@ -7,7 +7,7 @@ Real-world examples of working with Maps and Sets in Pura.
 ### LRU Cache with Map
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface CacheEntry<T> {
   value: T
@@ -65,7 +65,7 @@ class LRUCache<K, V> {
 ### Simple Cache
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Cache {
   data: Map<string, any>
@@ -130,7 +130,7 @@ function cleanupCache(cache: Cache): Cache {
 ### Permission Set
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 type Permission = 'read' | 'write' | 'delete' | 'admin'
 
@@ -173,7 +173,7 @@ function hasPermission(user: User, permission: Permission): boolean {
 ### Role-Based Access Control
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface RBAC {
   roles: Map<string, Set<Permission>>
@@ -226,7 +226,7 @@ function getUserPermissions(rbac: RBAC, userId: number): Set<Permission> {
 ### Document Tags
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Document {
   id: string
@@ -267,7 +267,7 @@ function setTags(doc: Document, tags: string[]): Document {
 ### Tag Indexing
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface TagIndex {
   tagToDocIds: Map<string, Set<string>>
@@ -308,7 +308,7 @@ function findByTag(index: TagIndex, tag: string): Set<string> {
 ### Active Sessions
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Session {
   id: string
@@ -390,7 +390,7 @@ function deleteSession(store: SessionStore, sessionId: string): SessionStore {
 ### Simple Graph
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Graph {
   nodes: Set<string>
@@ -440,7 +440,7 @@ function getNeighbors(graph: Graph, node: string): Set<string> {
 ### Event Listeners
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 type EventHandler = (data: any) => void
 

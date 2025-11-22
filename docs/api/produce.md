@@ -13,7 +13,7 @@ function produce<T>(base: T, recipe: (draft: T) => void): T
 `produce()` provides an Immer-compatible API where you mutate a draft object directly:
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const next = produce(state, draft => {
   draft.items[0] = 999        // Direct mutation

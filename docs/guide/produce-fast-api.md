@@ -7,7 +7,7 @@
 `produceFast()` uses a helper-based mutation API for optimal performance:
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const next = produceFast(state, $ => {
   $.set(['items', 0], 999)    // Helper-based mutation
@@ -26,7 +26,7 @@ const next = produceFast(state, $ => {
 ### Basic Operations
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const items = [1, 2, 3, 4, 5]
 
@@ -51,7 +51,7 @@ const popped = produceFast(items, $ => {
 All standard array methods are available:
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const items = [1, 2, 3, 4, 5]
 
@@ -94,7 +94,7 @@ const copied = produceFast(items, $ => {
 ### Filter & Map
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const items = [1, 2, 3, 4, 5]
 
@@ -116,7 +116,7 @@ const mapped = produceFast(items, $ => {
 ### Path-based Updates
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const user = {
   name: 'John',
@@ -143,7 +143,7 @@ const shallow = produceFast(user, $ => {
 ### Add/Delete Properties
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const user = { name: 'John', age: 30 }
 
@@ -161,7 +161,7 @@ const withoutAge = produceFast(user, $ => {
 ## Map Helper API
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const map = new Map([
   ['a', 1],
@@ -183,7 +183,7 @@ const updated = produceFast(map, $ => {
 ## Set Helper API
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const set = new Set([1, 2, 3])
 
@@ -205,7 +205,7 @@ const updated = produceFast(set, $ => {
 ### Conditional Updates
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const toggleTodo = (todos, id) => {
   return produceFast(todos, $ => {
@@ -222,7 +222,7 @@ const toggleTodo = (todos, id) => {
 ### Batch Updates
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const batchUpdate = (items, updates) => {
   return produceFast(items, $ => {
@@ -243,7 +243,7 @@ const next = batchUpdate(items, [
 ### Nested Structures
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const state = {
   users: [
@@ -274,7 +274,7 @@ const next = produceFast(state, $ => {
 Perfect TypeScript inference:
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface User {
   name: string
@@ -303,7 +303,7 @@ const next = produceFast(user, $ => {
 ## No Wrapper Needed
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 // ❌ Don't do this - unnecessary!
 const state = pura([1, 2, 3])
@@ -368,7 +368,7 @@ produceFast(todos, $ => {
 ### Redux Reducer
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const todosReducer = (state = [], action) => {
   switch (action.type) {
@@ -407,7 +407,7 @@ const todosReducer = (state = [], action) => {
 
 ```typescript
 import { useState } from 'react'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function TodoApp() {
   const [todos, setTodos] = useState([])
@@ -441,7 +441,7 @@ function TodoApp() {
 
 ```typescript
 import { create } from 'zustand'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const useStore = create((set) => ({
   items: [],
@@ -473,13 +473,13 @@ Both APIs work with the same data, but `produceFast()` is optimized:
 
 ```typescript
 // produce() - Immer-compatible
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 const next = produce(state, draft => {
   draft[0] = 999  // Direct mutation
 })
 
 // produceFast() - Optimized (1.06-105x faster)
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 const next = produceFast(state, $ => {
   $.set(0, 999)  // Helper-based
 })

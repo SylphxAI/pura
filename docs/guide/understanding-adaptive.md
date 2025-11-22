@@ -266,7 +266,7 @@ produceFast(large, $ => $.set(5000, 999))  // ~0.5μs (vs ~80μs native)
 Use `isPura()` to check if a value is a persistent tree:
 
 ```typescript
-import { isPura, produceFast } from 'pura'
+import { isPura, produceFast } from '@sylphx/pura'
 
 const small = [1, 2, 3]
 const smallResult = produceFast(small, $ => $.push(4))
@@ -282,7 +282,7 @@ console.log(isPura(largeResult))  // true (tree proxy)
 Use `unpura()` to convert tree back to native:
 
 ```typescript
-import { unpura, produceFast } from 'pura'
+import { unpura, produceFast } from '@sylphx/pura'
 
 const large = Array(1000).fill(0)
 const result = produceFast(large, $ => $.push(1))  // Tree
@@ -306,7 +306,7 @@ In rare cases, you might want to **force** a representation:
 ### Force Native (Small Data)
 
 ```typescript
-import { unpura } from 'pura'
+import { unpura } from '@sylphx/pura'
 
 const tree = produceFast(Array(1000).fill(0), $ => {
   // ... mutations
@@ -319,7 +319,7 @@ const native = unpura(tree)
 ### Force Tree (Large Data)
 
 ```typescript
-import { pura } from 'pura'
+import { pura } from '@sylphx/pura'
 
 const large = Array(10000).fill(0)
 

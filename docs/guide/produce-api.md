@@ -7,7 +7,7 @@ Immer-compatible API for direct mutation syntax.
 `produce()` provides an Immer-compatible API where you mutate a draft object directly:
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const next = produce(state, draft => {
   draft.items[0] = 999        // Direct mutation
@@ -29,7 +29,7 @@ const next = produce(state, draft => {
 ### Arrays
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const todos = ['Buy milk', 'Walk dog']
 
@@ -59,7 +59,7 @@ const result = produce(todos, draft => {
 ### Objects
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const user = {
   name: 'John',
@@ -95,7 +95,7 @@ const withoutAge = produce(user, draft => {
 ### Maps
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const map = new Map([
   ['a', 1],
@@ -112,7 +112,7 @@ const updated = produce(map, draft => {
 ### Sets
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const set = new Set([1, 2, 3])
 
@@ -127,7 +127,7 @@ const updated = produce(set, draft => {
 ### Nested Structures
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const state = {
   users: [
@@ -165,7 +165,7 @@ const next = produce(state, draft => {
 ### Conditional Updates
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const toggleTodo = (todos, id) => {
   return produce(todos, draft => {
@@ -192,7 +192,7 @@ const removeFailed = (items) => {
 All array methods work as expected:
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const items = [1, 2, 3, 4, 5]
 
@@ -226,7 +226,7 @@ const result4 = produce(items, draft => {
 Perfect TypeScript inference:
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 interface Todo {
   id: number
@@ -251,7 +251,7 @@ const updated = produce(todos, draft => {
 ## No Wrapper Needed
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 // ❌ Don't do this - unnecessary!
 const state = pura({ items: [1, 2, 3] })
@@ -329,7 +329,7 @@ const next = produce(state, draft => {
 })
 
 // Better - optimized helper API
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 const next = produceFast(state, $ => {
   $.set(['items', 0], 999)
 })
@@ -361,7 +361,7 @@ const next = produce(state, draft => {
 ### Redux Reducer
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const todosReducer = (state = [], action) => {
   return produce(state, draft => {
@@ -392,7 +392,7 @@ const todosReducer = (state = [], action) => {
 
 ```typescript
 import { useState } from 'react'
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 function useImmer(initialState) {
   const [state, setState] = useState(initialState)
@@ -425,7 +425,7 @@ Pura's `produce()` is **compatible** with Immer but **faster**:
 ```typescript
 // Both work the same way
 import { produce } from 'immer'     // Immer
-import { produce } from 'pura'      // Pura (1.06-105x faster)
+import { produce } from '@sylphx/pura'      // Pura (1.06-105x faster)
 
 const next = produce(state, draft => {
   draft.items[0] = 999

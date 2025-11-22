@@ -13,7 +13,7 @@ function isPura<T>(value: T): boolean
 `isPura()` returns `true` if the value is a Pura proxy (persistent structure), `false` otherwise:
 
 ```typescript
-import { isPura, produceFast } from 'pura'
+import { isPura, produceFast } from '@sylphx/pura'
 
 // Native
 console.log(isPura([1, 2, 3]))  // false
@@ -119,7 +119,7 @@ function processUser(user: User | PuraProxy<User>) {
 ### Ensure Native for Library
 
 ```typescript
-import { isPura, unpura } from 'pura'
+import { isPura, unpura } from '@sylphx/pura'
 
 function callLibrary(data) {
   const native = isPura(data) ? unpura(data) : data
@@ -130,7 +130,7 @@ function callLibrary(data) {
 ### Performance Branch
 
 ```typescript
-import { isPura, unpura } from 'pura'
+import { isPura, unpura } from '@sylphx/pura'
 
 function intensiveComputation(data) {
   // Convert to native for hot loop
@@ -147,7 +147,7 @@ function intensiveComputation(data) {
 ### Debug Helper
 
 ```typescript
-import { isPura, unpura } from 'pura'
+import { isPura, unpura } from '@sylphx/pura'
 
 function inspectData(label, data) {
   console.log(label, {

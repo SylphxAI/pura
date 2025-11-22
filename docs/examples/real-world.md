@@ -7,7 +7,7 @@ Production-ready patterns for Redux, React, Zustand, and more.
 ### Todo Reducer
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Todo {
   id: number
@@ -79,7 +79,7 @@ const todosReducer = (state: TodoState = [], action: TodoAction): TodoState => {
 ### Nested State Reducer
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface AppState {
   user: {
@@ -143,7 +143,7 @@ const rootReducer = (state: AppState, action: AppAction): AppState => {
 
 ```typescript
 import { useState } from 'react'
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 function useImmer<T>(initialState: T | (() => T)) {
   const [state, setState] = useState(initialState)
@@ -190,7 +190,7 @@ function TodoApp() {
 
 ```typescript
 import { useState } from 'react'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function useProduceFast<T>(initialState: T | (() => T)) {
   const [state, setState] = useState(initialState)
@@ -239,7 +239,7 @@ function TodoApp() {
 
 ```typescript
 import { useState } from 'react'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface FormState {
   values: {
@@ -304,7 +304,7 @@ function useFormState() {
 
 ```typescript
 import { create } from 'zustand'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Todo {
   id: number
@@ -399,7 +399,7 @@ function TodoList() {
 
 ```typescript
 import { create } from 'zustand'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface AppStore {
   user: {
@@ -475,7 +475,7 @@ const useAppStore = create<AppStore>((set) => ({
 
 ```typescript
 import { ref } from 'vue'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Todo {
   id: number
@@ -533,7 +533,7 @@ export function useTodos() {
 
 ```typescript
 import { atom } from 'jotai'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Todo {
   id: number
@@ -618,7 +618,7 @@ const handleBulkEdit = (ids: number[], updates: Partial<Todo>) => {
 
 ```typescript
 import { memo } from 'react'
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 // Structural sharing prevents unnecessary renders
 const TodoItem = memo(({ todo, onToggle }: { todo: Todo; onToggle: (id: number) => void }) => {

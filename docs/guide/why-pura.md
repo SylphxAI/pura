@@ -74,7 +74,7 @@ Pura uses **persistent data structures** to make immutability fast:
 
 ```typescript
 // ✅ Pura (fast, concise, safe)
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const updatedState = produceFast(state, $ => {
   $.set(['user', 'profile', 'settings', 'theme'], 'dark')
@@ -138,7 +138,7 @@ For a 10,000-element array, updating index 500:
 **`produce()` - Immer-Compatible**
 
 ```typescript
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 
 const next = produce(state, draft => {
   draft.items[0] = 999        // Direct mutation
@@ -154,7 +154,7 @@ Use when:
 **`produceFast()` - Optimized** (Recommended)
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const next = produceFast(state, $ => {
   $.set(['items', 0], 999)    // Helper-based
@@ -235,8 +235,8 @@ const next = produceFast(state, $ => {
 
 ```typescript
 // Only imports what you use
-import { produceFast } from 'pura'  // ~3KB
-import { produce } from 'pura'      // ~5KB
+import { produceFast } from '@sylphx/pura'  // ~3KB
+import { produce } from '@sylphx/pura'      // ~5KB
 ```
 
 No runtime dependencies. No bloat.

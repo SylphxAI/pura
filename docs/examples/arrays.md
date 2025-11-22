@@ -7,7 +7,7 @@ Real-world examples of working with arrays in Pura.
 ### Add Todo
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Todo {
   id: number
@@ -33,7 +33,7 @@ const next = produceFast(todos, $ => {
 ### Toggle Todo
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function toggleTodo(todos: Todo[], id: number): Todo[] {
   return produceFast(todos, $ => {
@@ -53,7 +53,7 @@ const toggled = toggleTodo(todos, 1)
 ### Delete Todo
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function deleteTodo(todos: Todo[], id: number): Todo[] {
   return produceFast(todos, $ => {
@@ -70,7 +70,7 @@ function deleteTodo(todos: Todo[], id: number): Todo[] {
 ### Filter Completed
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function removeCompleted(todos: Todo[]): Todo[] {
   return produceFast(todos, $ => {
@@ -84,7 +84,7 @@ function removeCompleted(todos: Todo[]): Todo[] {
 ### Add Item
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface CartItem {
   id: number
@@ -117,7 +117,7 @@ function addToCart(cart: CartItem[], product: { id: number; name: string; price:
 ### Update Quantity
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function updateQuantity(cart: CartItem[], id: number, quantity: number): CartItem[] {
   if (quantity <= 0) {
@@ -159,7 +159,7 @@ function calculateTotal(cart: CartItem[]): number {
 ### Add Message
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface Message {
   id: string
@@ -187,7 +187,7 @@ function addMessage(messages: Message[], text: string, author: string): Message[
 ### Add Reaction
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function addReaction(messages: Message[], messageId: string, emoji: string): Message[] {
   return produceFast(messages, $ => {
@@ -205,7 +205,7 @@ function addReaction(messages: Message[], messageId: string, emoji: string): Mes
 ### Edit Message
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function editMessage(messages: Message[], messageId: string, newText: string): Message[] {
   return produceFast(messages, $ => {
@@ -224,7 +224,7 @@ function editMessage(messages: Message[], messageId: string, newText: string): M
 ### Sort Table
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 interface User {
   id: number
@@ -257,7 +257,7 @@ const sorted = sortBy(users, 'age', false)  // Descending by age
 ### Update Row
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function updateUser(users: User[], id: number, updates: Partial<User>): User[] {
   return produceFast(users, $ => {
@@ -279,7 +279,7 @@ const updated = updateUser(users, 1, { age: 31, name: 'Alice Updated' })
 ### Delete Row
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function deleteUser(users: User[], id: number): User[] {
   return produceFast(users, $ => {
@@ -298,7 +298,7 @@ function deleteUser(users: User[], id: number): User[] {
 ### Batch Update
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function batchUpdate<T extends { id: number }>(
   items: T[],
@@ -329,7 +329,7 @@ const batched = batchUpdate(users, [
 ### Bulk Delete
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 function bulkDelete<T extends { id: number }>(items: T[], ids: number[]): T[] {
   const idSet = new Set(ids)

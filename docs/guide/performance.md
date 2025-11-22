@@ -8,14 +8,14 @@ Maximize Pura's performance with these optimization strategies.
 
 ```typescript
 // ✅ Best - produceFast() is 1.06-105x faster than Immer
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 const next = produceFast(state, $ => {
   $.set(['items', 0], 999)
   $.push(4)
 })
 
 // ✅ Good - produce() is still 1.06-105x faster than Immer
-import { produce } from 'pura'
+import { produce } from '@sylphx/pura'
 const next = produce(state, draft => {
   draft.items[0] = 999
 })
@@ -256,7 +256,7 @@ const next2 = produceFast(atThreshold, $ => $.set(256, 999))  // Tree
 ### Convert to Native for Intensive Computation
 
 ```typescript
-import { produceFast, unpura } from 'pura'
+import { produceFast, unpura } from '@sylphx/pura'
 
 // Build with Pura (structural sharing)
 const data = produceFast(largeArray, $ => {
@@ -340,7 +340,7 @@ const next = produce(state, draft => {
 ### Measure Before Optimizing
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 console.time('update')
 const next = produceFast(largeData, $ => {
@@ -423,7 +423,7 @@ const result = produceFast(data, $ => {
 ### Node.js Profiling
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 // Warmup (avoid JIT compilation noise)
 for (let i = 0; i < 100; i++) {
@@ -449,7 +449,7 @@ console.log(`Average: ${avg.toFixed(3)}ms`)
 ### Redux Reducer
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 // ✅ Optimized reducer
 const todosReducer = (state = [], action) => {
@@ -480,7 +480,7 @@ const todosReducer = (state = [], action) => {
 ### React State
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 import { useState } from 'react'
 
 function TodoApp() {

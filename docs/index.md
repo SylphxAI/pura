@@ -14,7 +14,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/sylphxltd/pura
+      link: https://github.com/SylphxAI/Pura
 
 features:
   - icon: 🎯
@@ -117,11 +117,11 @@ newMap.get('b')      // ✅ works - it's a real Map
 ## Installation
 
 ```bash
-npm install pura
+npm install @sylphx/pura
 # or
-bun add pura
+bun add @sylphx/pura
 # or
-pnpm add pura
+pnpm add @sylphx/pura
 ```
 
 ## Learn More

@@ -13,7 +13,7 @@ function produceFast<T>(base: T, recipe: (helper: FastHelper<T>) => void): T
 `produceFast()` uses a helper-based mutation API for optimal performance:
 
 ```typescript
-import { produceFast } from 'pura'
+import { produceFast } from '@sylphx/pura'
 
 const next = produceFast(state, $ => {
   $.set(['items', 0], 999)    // Helper-based mutation

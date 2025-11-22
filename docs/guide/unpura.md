@@ -5,7 +5,7 @@ Convert Pura persistent structures back to native JavaScript.
 ## Overview
 
 ```typescript
-import { unpura, produceFast, isPura } from 'pura'
+import { unpura, produceFast, isPura } from '@sylphx/pura'
 
 const large = Array.from({ length: 1000 }, (_, i) => i)
 const result = produceFast(large, $ => $.set(500, 999))
@@ -48,7 +48,7 @@ Pura proxies **behave like native structures** - they support:
 Some libraries use internal checks that fail on proxies:
 
 ```typescript
-import { unpura } from 'pura'
+import { unpura } from '@sylphx/pura'
 import externalLib from 'some-library'
 
 const puraArray = produceFast(data, $ => {
@@ -68,7 +68,7 @@ externalLib.process(native)  // ✅ Works!
 Native arrays are faster for tight loops (rare):
 
 ```typescript
-import { unpura, produceFast } from 'pura'
+import { unpura, produceFast } from '@sylphx/pura'
 
 const data = produceFast(largeArray, $ => {
   // ... build data structure
@@ -101,7 +101,7 @@ console.log(unpura(puraData))
 When APIs explicitly check for native types:
 
 ```typescript
-import { unpura } from 'pura'
+import { unpura } from '@sylphx/pura'
 
 const puraMap = produceFast(new Map(), $ => {
   $.set('a', 1)
@@ -119,7 +119,7 @@ nativeMap instanceof Map  // true ✅
 ### Basic Usage
 
 ```typescript
-import { unpura } from 'pura'
+import { unpura } from '@sylphx/pura'
 
 // Arrays
 const puraArray = produceFast([1, 2, 3], $ => $.push(4))
@@ -286,7 +286,7 @@ console.timeEnd('native-loop')
 Common pattern: build immutable structure with Pura, then use as native:
 
 ```typescript
-import { produceFast, unpura } from 'pura'
+import { produceFast, unpura } from '@sylphx/pura'
 
 function buildDataStructure(input) {
   // Build with structural sharing
@@ -312,7 +312,7 @@ thirdPartyLib.process(data)  // ✅ Native array
 Only convert when necessary:
 
 ```typescript
-import { unpura, isPura } from 'pura'
+import { unpura, isPura } from '@sylphx/pura'
 
 function ensureNative<T>(data: T): T {
   return isPura(data) ? unpura(data) : data
@@ -328,7 +328,7 @@ externalLib.process(result)  // Always native
 Ensure JSON serialization uses native structures:
 
 ```typescript
-import { unpura, produceFast } from 'pura'
+import { unpura, produceFast } from '@sylphx/pura'
 
 const state = produceFast(initialState, $ => {
   // ... mutations
@@ -346,7 +346,7 @@ const json = JSON.stringify(state)  // Pura proxies are serializable
 ### Hot Loop Optimization
 
 ```typescript
-import { produceFast, unpura } from 'pura'
+import { produceFast, unpura } from '@sylphx/pura'
 
 function processLargeDataset(data) {
   // Build result with Pura (structural sharing)
@@ -376,7 +376,7 @@ function processLargeDataset(data) {
 `unpura()` preserves types:
 
 ```typescript
-import { unpura, produceFast } from 'pura'
+import { unpura, produceFast } from '@sylphx/pura'
 
 interface User {
   id: number
@@ -406,7 +406,7 @@ console.log(native[0].tags instanceof Set)  // true
 ### isPura() - Check if Pura
 
 ```typescript
-import { isPura } from 'pura'
+import { isPura } from '@sylphx/pura'
 
 console.log(isPura([1, 2, 3]))  // false (native)
 console.log(isPura(produceFast([1, 2, 3], $ => $.push(4))))  // depends on size
@@ -417,7 +417,7 @@ console.log(isPura(produceFast([1, 2, 3], $ => $.push(4))))  // depends on size
 ### unpura() - Convert to Native
 
 ```typescript
-import { unpura } from 'pura'
+import { unpura } from '@sylphx/pura'
 
 const data = maybeNativeOrPura
 const native = unpura(data)  // Always native
@@ -428,7 +428,7 @@ const native = unpura(data)  // Always native
 ### Combined Pattern
 
 ```typescript
-import { isPura, unpura } from 'pura'
+import { isPura, unpura } from '@sylphx/pura'
 
 function ensureNativeIfNeeded<T>(data: T, forceNative: boolean): T {
   if (forceNative && isPura(data)) {
