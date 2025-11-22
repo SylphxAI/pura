@@ -224,7 +224,7 @@ All tests compare **immutable update** performance:
 
 ## 📊 Performance Charts
 
-### Pura vs Immer: Head-to-Head Comparison
+### Arrays: Small (100 elements) - Multiple Updates
 
 ```mermaid
 ---
@@ -234,18 +234,19 @@ config:
       backgroundColor: "transparent"
 ---
 xychart-beta
-    title "Pura vs Immer - Speedup Factor (Higher = Pura Wins)"
-    x-axis ["Arrays (Small)", "Arrays (Med)", "Objects", "Maps (1K)", "Sets (1K)"]
-    y-axis "Speedup (x faster)" 0 --> 110
-    bar [5.3, 1.1, 2.5, 12.0, 105.0]
-    line [1, 1, 1, 1, 1]
+    title "Array Multiple Updates (100 elements)"
+    x-axis ["Immer", "Pura", "Native Copy", "Native Direct"]
+    y-axis "Million ops/sec" 0 --> 65
+    bar [0.87, 4.63, 17.2, 63.7]
 ```
 
-**Key Insight**: Pura is **1.1-105x faster than Immer** across all scenarios. Maps and Sets show massive wins (12x and 105x).
+**Pura: 4.63M ops/s** | Immer: 0.87M ops/s | Native Copy: 17.2M ops/s | Native Direct: 63.7M ops/s
+
+**Result**: Pura **5.3x faster than Immer** ✅
 
 ---
 
-### Array Operations: Small vs Medium
+### Arrays: Medium (1,000 elements) - Multiple Updates
 
 ```mermaid
 ---
@@ -255,12 +256,20 @@ config:
       backgroundColor: "transparent"
 ---
 xychart-beta
-    title "Array Updates: Small (100 elements)"
-    x-axis ["Immer", "Pura", "Native Copy"]
-    y-axis "Million ops/sec" 0 --> 18
-    bar [0.87, 4.63, 17.2]
+    title "Array Multiple Updates (1K elements)"
+    x-axis ["Immer", "Native Copy", "Pura", "Native Direct"]
+    y-axis "Million ops/sec" 0 --> 70
+    bar [0.232, 0.025, 0.256, 67.8]
 ```
 
+**Pura: 256K ops/s** | Immer: 232K ops/s | Native Copy: 25K ops/s | Native Direct: 67.8M ops/s
+
+**Result**: Pura **1.1x faster than Immer** ✅, **10x faster than Native Copy** 🚀
+
+---
+
+### Objects: Deep Nested Updates
+
 ```mermaid
 ---
 config:
@@ -269,17 +278,19 @@ config:
       backgroundColor: "transparent"
 ---
 xychart-beta
-    title "Array Updates: Medium (1K elements)"
-    x-axis ["Immer", "Native Copy", "Pura"]
-    y-axis "Thousand ops/sec" 0 --> 300
-    bar [232, 25, 256]
+    title "Object Deep Updates (10 fields)"
+    x-axis ["Immer", "Pura", "Native Copy", "Native Direct"]
+    y-axis "Million ops/sec" 0 --> 190
+    bar [0.681, 1.70, 17.9, 189]
 ```
 
-**Key Insight**: **Small arrays**: Pura 5.3x faster than Immer. **Medium arrays**: Pura 1.1x faster, beats Native Copy (which becomes slow).
+**Pura: 1.70M ops/s** | Immer: 681K ops/s | Native Copy: 17.9M ops/s | Native Direct: 189M ops/s
+
+**Result**: Pura **2.5x faster than Immer** ✅
 
 ---
 
-### Maps & Sets: Pura's Dominance
+### Maps: Medium (1,000 entries) - Set Operation
 
 ```mermaid
 ---
@@ -289,11 +300,19 @@ config:
       backgroundColor: "transparent"
 ---
 xychart-beta
-    title "Maps (1K entries) - Set Operation"
-    x-axis ["Immer", "Pura", "Native"]
+    title "Map Set Operation (1K entries)"
+    x-axis ["Immer", "Native Copy", "Native Direct", "Pura"]
     y-axis "Thousand ops/sec" 0 --> 26
-    bar [2.08, 25.1, 23.8]
+    bar [2.08, 23.8, 23.9, 25.1]
 ```
+
+**Pura: 25.1K ops/s** | Immer: 2.08K ops/s | Native Copy: 23.8K ops/s | Native Direct: 23.9K ops/s
+
+**Result**: Pura **12x faster than Immer** 🚀, **matches native performance**
+
+---
+
+### Sets: Medium (1,000 elements) - Add Operation
 
 ```mermaid
 ---
@@ -303,13 +322,15 @@ config:
       backgroundColor: "transparent"
 ---
 xychart-beta
-    title "Sets (1K elements) - Add Operation"
-    x-axis ["Immer", "Pura", "Native"]
-    y-axis "Thousand ops/sec" 0 --> 250
-    bar [2.31, 243, 236]
+    title "Set Add Operation (1K elements)"
+    x-axis ["Immer", "Native Copy", "Native Direct", "Pura"]
+    y-axis "Thousand ops/sec" 0 --> 245
+    bar [2.31, 236, 236, 243]
 ```
 
-**Key Insight**: Pura **crushes Immer** on collections - **12x faster on Maps**, **105x faster on Sets**. Even matches native performance!
+**Pura: 243K ops/s** | Immer: 2.31K ops/s | Native Copy: 236K ops/s | Native Direct: 236K ops/s
+
+**Result**: Pura **105x faster than Immer** 🚀, **matches native performance**
 
 ---
 
