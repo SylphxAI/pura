@@ -596,7 +596,7 @@ interface RRBNode<T> {
 Pura is in early development. Contributions welcome!
 
 ```bash
-git clone https://github.com/sylphxltd/pura.git
+git clone https://github.com/SylphxAI/Pura.git
 cd pura
 bun install
 bun test
