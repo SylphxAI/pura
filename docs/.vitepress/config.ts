@@ -89,13 +89,24 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }],
     ['meta', { name: 'theme-color', content: '#3eaf7c' }],
+
+    // Open Graph / Facebook
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'Pura' }],
     ['meta', { property: 'og:title', content: 'Pura - Pure FP for TypeScript' }],
     ['meta', { property: 'og:description', content: 'Returns native JavaScript types. Immutability faster than mutation. Zero learning curve. 100% library compatible.' }],
     ['meta', { property: 'og:url', content: 'https://pura.sylphx.com' }],
+    ['meta', { property: 'og:image', content: 'https://pura.sylphx.com/og-image.png' }],
+    ['meta', { property: 'og:image:width', content: '1200' }],
+    ['meta', { property: 'og:image:height', content: '630' }],
+    ['meta', { property: 'og:image:alt', content: 'Pura - Pure FP for TypeScript' }],
+
+    // Twitter
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:site', content: '@SylphxAI' }],
     ['meta', { name: 'twitter:title', content: 'Pura - Pure FP for TypeScript' }],
     ['meta', { name: 'twitter:description', content: 'Returns native JavaScript types. Immutability faster than mutation. Zero learning curve. 100% library compatible.' }],
+    ['meta', { name: 'twitter:image', content: 'https://pura.sylphx.com/og-image.png' }],
+    ['meta', { name: 'twitter:image:alt', content: 'Pura - Pure FP for TypeScript' }],
   ]
 })
