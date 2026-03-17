@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     name: Test
-    runs-on: [self-hosted, linux, x64]
+    runs-on: sylphx-linux-standard
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
