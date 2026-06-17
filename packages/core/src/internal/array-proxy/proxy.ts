@@ -2,177 +2,25 @@
  * Array Proxy - Persistent vector with Array-like interface
  */
 
-import type { Owner, Node, Vec } from './types';
 import {
-  BITS,
-  MASK,
-  ARRAY_ADAPTIVE_THRESHOLD,
-  getStringIndex,
-  emptyVec,
-  vecPush,
-  vecPop,
-  vecGet,
-  vecAssoc,
-  vecFromArray,
-  vecToArray,
-  vecIter,
-  vecConcat,
-  vecSlice,
-  createNestedProxy,
   createNestedMapProxy,
+  createNestedProxy,
   createNestedSetProxy,
-  extractNestedValue,
-} from './index';
-
-export interface PuraArrayState<T> {
-  vec: Vec<T>;
-  isDraft: boolean;
-  owner?: Owner;
-  modified: boolean;
-  proxies?: Map<number, any>;
-  cachedLeaf?: T[];
-  cachedLeafStart?: number;
-  methodCache?: Map<string | symbol, Function>;
-}
-
-export const ARRAY_STATE_ENV = new WeakMap<any[], PuraArrayState<any>>();
-
-// Create a lightweight draft proxy for native arrays (Immer-like)
-function createNativeDraftProxy<T>(
-  data: T[],
-  markModified: () => void,
-  proxies: Map<number, any>
-): T[] {
-  const proxy = new Proxy(data, {
-    get(target, prop, receiver) {
-      if (prop === 'length') return target.length;
-
-      // Numeric index access with nested proxy support
-      if (typeof prop === 'string') {
-        const idx = Number(prop);
-        if (!isNaN(idx) && idx >= 0 && idx < target.length) {
-          const cached = proxies.get(idx);
-          if (cached) return cached;
-
-          const value = target[idx];
-          if (value !== null && typeof value === 'object') {
-            let nestedProxy: any;
-            if (value instanceof Map) {
-              nestedProxy = createNestedMapProxy(value as Map<any, any>, markModified);
-            } else if (value instanceof Set) {
-              nestedProxy = createNestedSetProxy(value as Set<any>, markModified);
-            } else {
-              nestedProxy = createNestedProxy(value as object, markModified);
-            }
-            proxies.set(idx, nestedProxy);
-            return nestedProxy;
-          }
-          return value;
-        }
-      }
-
-      // Array methods that mutate
-      if (prop === 'push') {
-        return (...items: T[]) => {
-          const result = target.push(...items);
-          if (items.length > 0) markModified();
-          return result;
-        };
-      }
-      if (prop === 'pop') {
-        return () => {
-          const result = target.pop();
-          if (result !== undefined) markModified();
-          return result;
-        };
-      }
-      if (prop === 'shift') {
-        return () => {
-          const result = target.shift();
-          if (result !== undefined) markModified();
-          return result;
-        };
-      }
-      if (prop === 'unshift') {
-        return (...items: T[]) => {
-          const result = target.unshift(...items);
-          if (items.length > 0) markModified();
-          return result;
-        };
-      }
-      if (prop === 'splice') {
-        return (...args: any[]) => {
-          // @ts-ignore - spread args from proxy
-          const result = target.splice(...args);
-          markModified();
-          return result;
-        };
-      }
-      if (prop === 'sort' || prop === 'reverse') {
-        return (...args: any[]) => {
-          const result = (target as any)[prop](...args);
-          markModified();
-          return proxy;
-        };
-      }
-
-      // Delegate other properties/methods to target
-      const value = Reflect.get(target, prop, receiver);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-
-    set(target, prop, value) {
-      if (typeof prop === 'string') {
-        const idx = Number(prop);
-        if (!isNaN(idx) && idx >= 0) {
-          target[idx] = value;
-          proxies.delete(idx); // Clear cached proxy
-          markModified();
-          return true;
-        }
-      }
-      if (prop === 'length') {
-        const oldLen = target.length;
-        target.length = value;
-        if (value !== oldLen) markModified();
-        return true;
-      }
-      return Reflect.set(target, prop, value);
-    },
-  });
-
-  return proxy;
-}
-
-function vecGetCached<T>(state: PuraArrayState<T>, index: number): T | undefined {
-  const { vec } = state;
-  const { count, treeCount } = vec;
-  if (index < 0 || index >= count) return undefined;
-
-  if (index >= treeCount) {
-    return vec.tail[index - treeCount];
-  }
-
-  const leafStart = index & ~MASK;
-
-  if (state.cachedLeaf && state.cachedLeafStart === leafStart) {
-    return state.cachedLeaf[index & MASK];
-  }
-
-  const { shift, root } = vec;
-  let node: Node<T> = root;
-  let level = shift;
-
-  while (level > 0) {
-    node = node.arr[(index >>> level) & MASK] as Node<T>;
-    level -= BITS;
-  }
-
-  state.cachedLeaf = node.arr as T[];
-  state.cachedLeafStart = leafStart;
-
-  return node.arr[index & MASK] as T;
-}
+  emptyVec,
+  getStringIndex,
+  vecAssoc,
+  vecConcat,
+  vecGet,
+  vecIter,
+  vecPop,
+  vecPush,
+  vecSlice,
+  vecToArray,
+} from "../index";
+import type { Owner } from "../types";
+import type { PuraArrayState } from "./state";
+import { ARRAY_STATE_ENV } from "./state";
+import { vecGetCached } from "./vec-get-cached";
 
 export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
   if (state.isDraft) {
@@ -184,17 +32,20 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
 
   const proxy = new Proxy([] as T[], {
     get(target, prop, receiver) {
-      if (prop === '__PURA_STATE__') return state;
-      if (prop === 'length') return state.vec.count;
+      if (prop === "__PURA_STATE__") return state;
+      if (prop === "length") return state.vec.count;
 
-      if (typeof prop === 'string') {
+      if (typeof prop === "string") {
         const c0 = prop.charCodeAt(0);
         if (c0 >= 48 && c0 <= 57) {
           const len = prop.length;
           let idx = c0 - 48;
           for (let j = 1; j < len; j++) {
             const c = prop.charCodeAt(j);
-            if (c < 48 || c > 57) { idx = -1; break; }
+            if (c < 48 || c > 57) {
+              idx = -1;
+              break;
+            }
             idx = idx * 10 + (c - 48);
           }
           if (idx >= 0 && idx < state.vec.count) {
@@ -209,7 +60,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
               value = vecGetCached(state, idx);
             }
 
-            if (state.isDraft && value !== null && typeof value === 'object') {
+            if (state.isDraft && value !== null && typeof value === "object") {
               let nestedProxy: any;
               if (value instanceof Map) {
                 nestedProxy = createNestedMapProxy(value as Map<any, any>, () => {
@@ -244,7 +95,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
       };
 
       switch (prop) {
-        case 'push':
+        case "push":
           return (...items: T[]) => {
             for (const item of items) {
               state.vec = vecPush(state.vec, state.owner, item);
@@ -254,7 +105,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return state.vec.count;
           };
 
-        case 'pop':
+        case "pop":
           return () => {
             const res = vecPop(state.vec, state.owner);
             state.vec = res.vec;
@@ -265,32 +116,32 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return res.val;
           };
 
-        case 'toJSON':
-          return getCachedMethod('toJSON', () => () => vecToArray(state.vec));
+        case "toJSON":
+          return getCachedMethod("toJSON", () => () => vecToArray(state.vec));
 
-        case 'toString':
+        case "toString":
           return () => {
-            let result = '';
+            let result = "";
             let first = true;
             for (const v of vecIter(state.vec)) {
-              if (!first) result += ',';
+              if (!first) result += ",";
               first = false;
-              result += v == null ? '' : String(v);
+              result += v == null ? "" : String(v);
             }
             return result;
           };
 
-        case 'toLocaleString':
+        case "toLocaleString":
           return (...args: any[]) => {
-            let result = '';
+            let result = "";
             let first = true;
             for (const v of vecIter(state.vec)) {
-              if (!first) result += ',';
+              if (!first) result += ",";
               first = false;
-              if (v != null && typeof (v as any).toLocaleString === 'function') {
+              if (v != null && typeof (v as any).toLocaleString === "function") {
                 result += (v as any).toLocaleString(...args);
               } else {
-                result += v == null ? '' : String(v);
+                result += v == null ? "" : String(v);
               }
             }
             return result;
@@ -304,15 +155,21 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             } else {
               let i = 0;
               for (const val of vecIter(v)) {
-                if (val !== null && typeof val === 'object') {
+                if (val !== null && typeof val === "object") {
                   let nested = state.proxies?.get(i);
                   if (!nested) {
                     if (val instanceof Map) {
-                      nested = createNestedMapProxy(val as Map<any, any>, () => { state.modified = true; });
+                      nested = createNestedMapProxy(val as Map<any, any>, () => {
+                        state.modified = true;
+                      });
                     } else if (val instanceof Set) {
-                      nested = createNestedSetProxy(val as Set<any>, () => { state.modified = true; });
+                      nested = createNestedSetProxy(val as Set<any>, () => {
+                        state.modified = true;
+                      });
                     } else {
-                      nested = createNestedProxy(val, () => { state.modified = true; });
+                      nested = createNestedProxy(val, () => {
+                        state.modified = true;
+                      });
                     }
                     state.proxies!.set(i, nested);
                   }
@@ -325,7 +182,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             }
           };
 
-        case 'map':
+        case "map":
           return (fn: (v: T, i: number, a: T[]) => any, thisArg?: any) => {
             const result: any[] = [];
             let i = 0;
@@ -335,7 +192,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'filter':
+        case "filter":
           return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
             const result: T[] = [];
             let i = 0;
@@ -347,7 +204,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'reduce':
+        case "reduce":
           return (...reduceArgs: any[]) => {
             const fn = reduceArgs[0] as (acc: any, v: T, i: number, a: T[]) => any;
             let acc: any;
@@ -366,7 +223,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return acc;
           };
 
-        case 'forEach':
+        case "forEach":
           return (fn: (v: T, i: number, a: T[]) => void, thisArg?: any) => {
             let i = 0;
             for (const v of vecIter(state.vec)) {
@@ -374,7 +231,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             }
           };
 
-        case 'some':
+        case "some":
           return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
             let i = 0;
             for (const v of vecIter(state.vec)) {
@@ -383,7 +240,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return false;
           };
 
-        case 'every':
+        case "every":
           return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
             let i = 0;
             for (const v of vecIter(state.vec)) {
@@ -392,7 +249,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return true;
           };
 
-        case 'find':
+        case "find":
           return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
             let i = 0;
             for (const v of vecIter(state.vec)) {
@@ -401,7 +258,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return undefined;
           };
 
-        case 'findIndex':
+        case "findIndex":
           return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
             let i = 0;
             for (const v of vecIter(state.vec)) {
@@ -411,12 +268,15 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return -1;
           };
 
-        case 'includes':
+        case "includes":
           return (search: T, fromIndex?: number) => {
             let i = 0;
             const start = fromIndex ?? 0;
             for (const v of vecIter(state.vec)) {
-              if (i >= start && (v === search || (Number.isNaN(search) && Number.isNaN(v as any)))) {
+              if (
+                i >= start &&
+                (v === search || (Number.isNaN(search) && Number.isNaN(v as any)))
+              ) {
                 return true;
               }
               i++;
@@ -424,7 +284,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return false;
           };
 
-        case 'indexOf':
+        case "indexOf":
           return (search: T, fromIndex?: number) => {
             let i = 0;
             const start = fromIndex ?? 0;
@@ -435,7 +295,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return -1;
           };
 
-        case 'lastIndexOf':
+        case "lastIndexOf":
           return (search: T, fromIndex?: number) => {
             const len = state.vec.count;
             const start = fromIndex === undefined ? len - 1 : Math.min(fromIndex, len - 1);
@@ -448,7 +308,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return lastMatch;
           };
 
-        case 'at':
+        case "at":
           return (index: number) => {
             const len = state.vec.count;
             const idx = index < 0 ? len + index : index;
@@ -456,17 +316,17 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return vecGetCached(state, idx);
           };
 
-        case 'keys':
+        case "keys":
           return function* () {
             for (let i = 0; i < state.vec.count; i++) yield i;
           };
 
-        case 'values':
+        case "values":
           return function* () {
             yield* vecIter(state.vec);
           };
 
-        case 'entries':
+        case "entries":
           return function* () {
             let i = 0;
             for (const v of vecIter(state.vec)) {
@@ -474,11 +334,13 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             }
           };
 
-        case 'slice':
+        case "slice":
           return (start?: number, end?: number) => {
             const len = state.vec.count;
-            let s = start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
-            let e = end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
+            const s =
+              start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+            const e =
+              end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
             if (s >= e) return [];
             const resultLen = e - s;
             const result = new Array(resultLen);
@@ -488,20 +350,20 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'join':
+        case "join":
           return (separator?: string) => {
-            const sep = separator === undefined ? ',' : separator;
-            let result = '';
+            const sep = separator === undefined ? "," : separator;
+            let result = "";
             let first = true;
             for (const v of vecIter(state.vec)) {
               if (!first) result += sep;
               first = false;
-              result += v == null ? '' : String(v);
+              result += v == null ? "" : String(v);
             }
             return result;
           };
 
-        case 'concat':
+        case "concat":
           return (...args: any[]) => {
             const result: T[] = [];
             for (const v of vecIter(state.vec)) {
@@ -526,7 +388,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'flat':
+        case "flat":
           return (depth = 1) => {
             const result: any[] = [];
             const flatten = (arr: Iterable<any>, d: number) => {
@@ -547,7 +409,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'flatMap':
+        case "flatMap":
           return (fn: (v: T, i: number, a: T[]) => any, thisArg?: any) => {
             const result: any[] = [];
             let i = 0;
@@ -571,7 +433,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'reduceRight':
+        case "reduceRight":
           return (...reduceArgs: any[]) => {
             const fn = reduceArgs[0] as (acc: any, v: T, i: number, a: T[]) => any;
             const len = state.vec.count;
@@ -594,7 +456,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return acc;
           };
 
-        case 'findLast':
+        case "findLast":
           return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
             const values: T[] = [];
             for (const v of vecIter(state.vec)) {
@@ -606,7 +468,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return undefined;
           };
 
-        case 'findLastIndex':
+        case "findLastIndex":
           return (fn: (v: T, i: number, a: T[]) => boolean, thisArg?: any) => {
             const values: T[] = [];
             for (const v of vecIter(state.vec)) {
@@ -618,7 +480,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return -1;
           };
 
-        case 'toReversed':
+        case "toReversed":
           return () => {
             const result: T[] = [];
             for (const v of vecIter(state.vec)) {
@@ -628,7 +490,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'toSorted':
+        case "toSorted":
           return (compareFn?: (a: T, b: T) => number) => {
             const arr: T[] = [];
             for (const v of vecIter(state.vec)) {
@@ -637,7 +499,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return arr.sort(compareFn);
           };
 
-        case 'toSpliced':
+        case "toSpliced":
           return (start: number, deleteCount?: number, ...items: T[]) => {
             const len = state.vec.count;
             const s = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
@@ -655,11 +517,11 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'with':
+        case "with":
           return (index: number, value: T) => {
             const len = state.vec.count;
             const idx = index < 0 ? len + index : index;
-            if (idx < 0 || idx >= len) throw new RangeError('Invalid index');
+            if (idx < 0 || idx >= len) throw new RangeError("Invalid index");
             const result: T[] = [];
             for (const v of vecIter(state.vec)) {
               result.push(v);
@@ -668,11 +530,13 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return result;
           };
 
-        case 'fill':
+        case "fill":
           return (value: T, start?: number, end?: number) => {
             const len = state.vec.count;
-            const s = start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
-            const e = end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
+            const s =
+              start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+            const e =
+              end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
             for (let i = s; i < e; i++) {
               state.vec = vecAssoc(state.vec, state.owner, i, value);
             }
@@ -683,12 +547,14 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return proxy;
           };
 
-        case 'copyWithin':
+        case "copyWithin":
           return (target: number, start?: number, end?: number) => {
             const len = state.vec.count;
-            let t = target < 0 ? Math.max(len + target, 0) : Math.min(target, len);
-            const s = start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
-            const e = end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
+            const t = target < 0 ? Math.max(len + target, 0) : Math.min(target, len);
+            const s =
+              start === undefined ? 0 : start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
+            const e =
+              end === undefined ? len : end < 0 ? Math.max(len + end, 0) : Math.min(end, len);
             const count = Math.min(e - s, len - t);
             for (let i = 0; i < count; i++) {
               const v = vecGet(state.vec, s + i);
@@ -701,7 +567,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return proxy;
           };
 
-        case 'shift':
+        case "shift":
           return () => {
             if (state.vec.count === 0) return undefined;
             const first = vecGetCached(state, 0);
@@ -712,7 +578,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return first;
           };
 
-        case 'unshift':
+        case "unshift":
           return (...items: T[]) => {
             if (items.length === 0) return state.vec.count;
             const owner: Owner = {};
@@ -727,11 +593,12 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return state.vec.count;
           };
 
-        case 'splice':
+        case "splice":
           return (start: number, deleteCount?: number, ...items: T[]) => {
             const len = state.vec.count;
             const s = start < 0 ? Math.max(len + start, 0) : Math.min(start, len);
-            const dc = deleteCount === undefined ? len - s : Math.max(0, Math.min(deleteCount, len - s));
+            const dc =
+              deleteCount === undefined ? len - s : Math.max(0, Math.min(deleteCount, len - s));
 
             const deleted: T[] = [];
             for (let i = 0; i < dc; i++) {
@@ -762,7 +629,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return deleted;
           };
 
-        case 'reverse':
+        case "reverse":
           return () => {
             const len = state.vec.count;
             if (len <= 1) return proxy;
@@ -783,7 +650,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
             return proxy;
           };
 
-        case 'sort':
+        case "sort":
           return (compareFn?: (a: T, b: T) => number) => {
             const arr: T[] = [];
             for (const v of vecIter(state.vec)) {
@@ -807,7 +674,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
     },
 
     set(target, prop, value, receiver) {
-      if (prop === 'length') {
+      if (prop === "length") {
         const newLen = Number(value);
         if (!Number.isInteger(newLen) || newLen < 0) return false;
         if (newLen === state.vec.count) return true;
@@ -829,14 +696,17 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
         return true;
       }
 
-      if (typeof prop === 'string') {
+      if (typeof prop === "string") {
         const c0 = prop.charCodeAt(0);
         if (c0 >= 48 && c0 <= 57) {
           const len = prop.length;
           let idx = c0 - 48;
           for (let j = 1; j < len; j++) {
             const c = prop.charCodeAt(j);
-            if (c < 48 || c > 57) { idx = -1; break; }
+            if (c < 48 || c > 57) {
+              idx = -1;
+              break;
+            }
             idx = idx * 10 + (c - 48);
           }
           if (idx >= 0) {
@@ -866,12 +736,12 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
       for (let i = 0; i < count; i++) {
         keys[i] = getStringIndex(i);
       }
-      keys[count] = 'length';
+      keys[count] = "length";
       return keys;
     },
 
     getOwnPropertyDescriptor(target, prop) {
-      if (prop === 'length') {
+      if (prop === "length") {
         return {
           value: state.vec.count,
           writable: true,
@@ -879,7 +749,7 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
           configurable: false,
         };
       }
-      if (typeof prop === 'string') {
+      if (typeof prop === "string") {
         const idx = Number(prop);
         if (!Number.isNaN(idx) && idx >= 0 && idx < state.vec.count) {
           return {
@@ -894,8 +764,8 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
     },
 
     has(target, prop) {
-      if (prop === 'length') return true;
-      if (typeof prop === 'string') {
+      if (prop === "length") return true;
+      if (typeof prop === "string") {
         const idx = Number(prop);
         if (!Number.isNaN(idx)) return idx >= 0 && idx < state.vec.count;
       }
@@ -905,103 +775,4 @@ export function createArrayProxy<T>(state: PuraArrayState<T>): T[] {
 
   ARRAY_STATE_ENV.set(proxy, state);
   return proxy;
-}
-
-export function produceArray<T>(base: T[], recipe: (draft: T[]) => void): T[] {
-  const baseState = ARRAY_STATE_ENV.get(base);
-  const isBaseProxy = !!baseState;
-  const baseLength = isBaseProxy ? baseState.vec.count : base.length;
-
-  // Case 1: native small → native (Immer-like approach)
-  if (!isBaseProxy && baseLength < ARRAY_ADAPTIVE_THRESHOLD) {
-    const draftData = base.slice(); // shallow copy
-    let modified = false;
-    const proxies = new Map<number, any>();
-
-    const draft = createNativeDraftProxy(draftData, () => { modified = true; }, proxies);
-    recipe(draft);
-
-    // Finalize nested proxies
-    if (proxies.size > 0) {
-      for (const [idx, nestedProxy] of proxies) {
-        const finalValue = extractNestedValue(nestedProxy);
-        if (finalValue !== draftData[idx]) {
-          draftData[idx] = finalValue;
-          modified = true;
-        }
-      }
-    }
-
-    if (!modified) return base;
-
-    // Check result size: upgrade to tree if large
-    if (draftData.length >= ARRAY_ADAPTIVE_THRESHOLD) {
-      const vec = vecFromArray(draftData);
-      const finalState: PuraArrayState<T> = {
-        vec,
-        isDraft: false,
-        owner: undefined,
-        modified: false,
-      };
-      return createArrayProxy<T>(finalState);
-    }
-
-    // Still small → return native
-    return draftData;
-  }
-
-  // Case 2 & 3: large native or already proxy → use tree
-  const baseVec = isBaseProxy ? baseState.vec : vecFromArray(base);
-
-  const draftOwner: Owner = {};
-  const draftVec: Vec<T> = {
-    count: baseVec.count,
-    shift: baseVec.shift,
-    root: baseVec.root,
-    tail: baseVec.tail,
-    treeCount: baseVec.treeCount,
-  };
-
-  const draftState: PuraArrayState<T> = {
-    vec: draftVec,
-    isDraft: true,
-    owner: draftOwner,
-    modified: false,
-  };
-
-  const draft = createArrayProxy<T>(draftState);
-  recipe(draft);
-
-  // Finalize nested proxies
-  if (draftState.proxies && draftState.proxies.size > 0) {
-    for (const [idx, nestedProxy] of draftState.proxies) {
-      const finalValue = extractNestedValue(nestedProxy);
-      if (finalValue !== vecGet(draftState.vec, idx)) {
-        draftState.vec = vecAssoc(
-          draftState.vec,
-          draftOwner,
-          idx,
-          finalValue as T
-        );
-        draftState.modified = true;
-      }
-    }
-  }
-
-  if (!draftState.modified) return base;
-
-  // Case 4: Check result size - downgrade to native if small
-  if (draftState.vec.count < ARRAY_ADAPTIVE_THRESHOLD) {
-    return vecToArray(draftState.vec);
-  }
-
-  // Still large → return tree proxy
-  const finalState: PuraArrayState<T> = {
-    vec: draftState.vec,
-    isDraft: false,
-    owner: undefined,
-    modified: false,
-  };
-
-  return createArrayProxy<T>(finalState);
 }
