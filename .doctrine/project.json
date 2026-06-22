@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "repo": "SylphxAI/pura",
+    "name": "Pura",
+    "lifecycle": "production",
+    "layer": "foundation",
+    "summary": "Pura is a TypeScript immutable-update and persistent-data-structure library that returns native JavaScript types while providing fast immutable operations, Immer-compatible migration paths, produceFast, benchmarks, docs, and an npm package under @sylphx/pura.",
+    "goals": [
+      "Provide a fast, type-safe immutable update library for native Array, Object, Map, and Set values.",
+      "Own the @sylphx/pura package, public APIs, persistent data-structure implementation, docs, tests, and benchmarks.",
+      "Keep benchmark and compatibility claims reproducible."
+    ],
+    "nonGoals": [
+      "Own downstream application state models or product-specific update semantics.",
+      "Make performance claims without reproducible benchmark context.",
+      "Publish package changes without Changesets intent, CI, and npm readback."
+    ]
+  },
+  "boundaries": {
+    "owns": [
+      {
+        "name": "pura-package-api",
+        "description": "Public @sylphx/pura API, native-type return contract, type definitions, and package metadata."
+      },
+      {
+        "name": "persistent-data-structures",
+        "description": "Immutable update implementation, structural sharing, HAMT/RRB-style internals, tests, docs, and benchmarks."
+      }
+    ],
+    "doesNotOwn": [
+      "Downstream application state models, UI framework behavior, storage layers, or product-specific update semantics.",
+      "Third-party benchmark environments outside documented benchmark scripts and results.",
+      "Enterprise doctrine or organization-wide package release policy."
+    ],
+    "publicSurfaces": [
+      {
+        "type": "package-export",
+        "name": "@sylphx/pura package",
+        "location": "packages/core/package.json"
+      },
+      {
+        "type": "documentation",
+        "name": "Public docs and guides",
+        "location": "README.md and docs/"
+      },
+      {
+        "type": "workflow",
+        "name": "CI workflow",
+        "location": ".github/workflows/ci.yml"
+      },
+      {
+        "type": "workflow",
+        "name": "Release workflow",
+        "location": ".github/workflows/release.yml"
+      },
+      {
+        "type": "status-context",
+        "name": "Required branch context",
+        "location": "Test"
+      }
+    ],
+    "allowedDependencies": [
+      {
+        "repo": "SylphxAI/doctrine",
+        "surface": "enterprise engineering doctrine",
+        "direction": "downward"
+      }
+    ],
+    "forbiddenCouplings": [
+      "Do not encode downstream product state semantics into the shared library core.",
+      "Do not publish benchmark claims without reproducible benchmark context.",
+      "Do not publish package changes from a human shell or personal token."
+    ]
+  },
+  "documentation": {
+    "adr": {
+      "path": "docs/guide/",
+      "status": "planned"
+    },
+    "specs": {
+      "path": "docs/api/",
+      "status": "present"
+    },
+    "catalog": {
+      "path": "PROJECT.md",
+      "status": "present"
+    },
+    "runbooks": {
+      "path": "AGENTS.md",
+      "status": "present"
+    },
+    "generatedReferences": {
+      "path": "packages/core/dist/",
+      "status": "generated"
+    }
+  },
+  "delivery": {
+    "ciModel": "legacy-ci",
+    "requiredContexts": ["Test"],
+    "deployPath": "No hosted deploy path is declared. Package release runs from main through .github/workflows/release.yml using Changesets.",
+    "productionProof": "Test workflow, build/test/lint/typecheck evidence, benchmark evidence for performance claims, Changesets release intent, and npm readback for @sylphx/pura.",
+    "recoveryClass": "forward-fix-only",
+    "packageRelease": {
+      "publishesPackages": true,
+      "ecosystems": ["npm", "changesets"],
+      "releaseIntent": "Changesets capture package release intent.",
+      "versionPr": "changesets/action creates version changes or publishes from main.",
+      "publisher": ".github/workflows/release.yml with inherited GITHUB_TOKEN and NPM_TOKEN.",
+      "requiredContexts": ["Test"],
+      "publishProof": "npm package readback for @sylphx/pura plus changelog/version evidence."
+    }
+  },
+  "commercial": {
+    "status": "researching",
+    "decisionHome": "README.md and docs/guide/performance.md",
+    "pricingSourceOfTruth": "not-applicable",
+    "metricsSourceOfTruth": "benchmark reports and npm package readback",
+    "requiredRecords": ["market-positioning", "packaging", "roadmap"],
+    "guardrails": [
+      "Commercial positioning must be backed by benchmark and competitor evidence.",
+      "Package claims must not exceed reproducible tests and benchmarks."
+    ]
+  },
+  "adoption": {
+    "status": "baseline",
+    "gaps": [
+      {
+        "id": "package-release-proof",
+        "description": "Package publication proof should include npm readback and benchmark context when performance claims change.",
+        "owner": "SylphxAI/pura",
+        "target": "before full package-release adoption"
+      }
+    ]
+  }
+}
