@@ -1,54 +1,54 @@
 {
-  "name": "pura",
-  "version": "0.1.0",
-  "description": "Pure FP for TypeScript - Fast, Type-Safe, Zero Compromise",
-  "type": "module",
-  "author": "SylphX Ltd",
-  "license": "MIT",
-  "keywords": [
-    "functional",
-    "immutable",
-    "persistent",
-    "pure-fp",
-    "typescript",
-    "hamt",
-    "rrb-tree",
-    "data-structures"
-  ],
-  "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SylphxAI/Pura.git"
-  },
-  "scripts": {
-    "build": "tsc --build",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "bench": "vitest bench",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "format": "biome format --write .",
-    "typecheck": "tsc --noEmit",
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs",
-    "changeset": "changeset",
-    "version-packages": "changeset version",
-    "release": "changeset publish"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "@changesets/changelog-github": "^0.5.1",
-    "@changesets/cli": "^2.29.7",
-    "@types/node": "^22.10.2",
-    "@vitest/coverage-v8": "^2.1.9",
-    "immer": "^10.2.0",
-    "typescript": "^5.6.3",
-    "vitepress": "^1.6.4",
-    "vitest": "^2.1.5",
-    "vue": "^3.5.24"
-  }
+	"name": "pura",
+	"version": "0.1.0",
+	"description": "Pure FP for TypeScript - Fast, Type-Safe, Zero Compromise",
+	"type": "module",
+	"author": "SylphX Ltd",
+	"license": "MIT",
+	"keywords": [
+		"functional",
+		"immutable",
+		"persistent",
+		"pure-fp",
+		"typescript",
+		"hamt",
+		"rrb-tree",
+		"data-structures"
+	],
+	"private": true,
+	"workspaces": [
+		"packages/*"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/SylphxAI/Pura.git"
+	},
+	"scripts": {
+		"build": "tsc --build",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"bench": "vitest bench",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"typecheck": "tsc --noEmit",
+		"docs:dev": "vitepress dev docs",
+		"docs:build": "vitepress build docs",
+		"docs:preview": "vitepress preview docs",
+		"changeset": "changeset",
+		"version-packages": "changeset version",
+		"release": "echo \"Direct changeset publish is unsafe for workspace packages; use the Sylphx release workflow.\" && exit 1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@changesets/changelog-github": "^0.5.1",
+		"@changesets/cli": "^2.29.7",
+		"@types/node": "^22.10.2",
+		"@vitest/coverage-v8": "^2.1.9",
+		"immer": "^10.2.0",
+		"typescript": "^5.6.3",
+		"vitepress": "^1.6.4",
+		"vitest": "^2.1.5",
+		"vue": "^3.5.24"
+	}
 }
