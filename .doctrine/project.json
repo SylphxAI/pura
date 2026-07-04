@@ -58,6 +58,31 @@
         "type": "status-context",
         "name": "Required branch context",
         "location": "Test"
+      },
+      {
+        "type": "manifest",
+        "name": "Vendor-neutral project manifest",
+        "location": "project.manifest.json"
+      },
+      {
+        "type": "test",
+        "name": "Project-control boundary test",
+        "location": "test/project-control.node-test.mjs"
+      },
+      {
+        "type": "documentation",
+        "name": "Project-control ADRs",
+        "location": "docs/adr/"
+      },
+      {
+        "type": "documentation",
+        "name": "Project-control specs",
+        "location": "docs/specs/"
+      },
+      {
+        "type": "documentation",
+        "name": "Security policy",
+        "location": "SECURITY.md"
       }
     ],
     "allowedDependencies": [
@@ -65,6 +90,16 @@
         "repo": "SylphxAI/doctrine",
         "surface": "enterprise engineering doctrine",
         "direction": "downward"
+      },
+      {
+        "repo": "SylphxAI/.github",
+        "surface": "reusable release workflow",
+        "direction": "upstream-shared"
+      },
+      {
+        "repo": "SylphxAI/groundatlas",
+        "surface": "Released GroundAtlas package/action for vendor-neutral project manifest validation and fleet dogfooding.",
+        "direction": "peer-public"
       }
     ],
     "forbiddenCouplings": [
@@ -75,19 +110,19 @@
   },
   "documentation": {
     "adr": {
-      "path": "docs/guide/",
-      "status": "planned"
+      "path": "docs/adr/",
+      "status": "present"
     },
     "specs": {
-      "path": "docs/api/",
+      "path": "docs/api/, docs/guide/, and docs/specs/",
       "status": "present"
     },
     "catalog": {
-      "path": "PROJECT.md",
+      "path": "PROJECT.md and project.manifest.json",
       "status": "present"
     },
     "runbooks": {
-      "path": "AGENTS.md",
+      "path": "AGENTS.md and SECURITY.md",
       "status": "present"
     },
     "generatedReferences": {
@@ -96,19 +131,26 @@
     }
   },
   "delivery": {
-    "ciModel": "legacy-ci",
-    "requiredContexts": ["Test"],
-    "deployPath": "No hosted deploy path is declared. Package release runs from main through .github/workflows/release.yml using Changesets.",
-    "productionProof": "Test workflow, build/test/lint/typecheck evidence, benchmark evidence for performance claims, Changesets release intent, and npm readback for @sylphx/pura.",
+    "ciModel": "repo-ci-with-groundatlas",
+    "requiredContexts": [
+      "Test"
+    ],
+    "deployPath": "Pull requests and merge groups run .github/workflows/ci.yml with bun run validate, project-control boundary tests, and GroundAtlas package dogfood. Main-branch package release delegates to SylphxAI/.github reusable release workflow with caller-side id-token: write.",
+    "productionProof": "Test workflow, bun run validate, project-control boundary tests, GroundAtlas package dogfood, benchmark evidence for performance claims, Changesets release intent, successful Release workflow for package changes, and npm readback for @sylphx/pura.",
     "recoveryClass": "forward-fix-only",
     "packageRelease": {
       "publishesPackages": true,
-      "ecosystems": ["npm", "changesets"],
+      "ecosystems": [
+        "npm",
+        "changesets"
+      ],
       "releaseIntent": "Changesets capture package release intent.",
       "versionPr": "changesets/action creates version changes or publishes from main.",
-      "publisher": ".github/workflows/release.yml with inherited GITHUB_TOKEN and NPM_TOKEN.",
-      "requiredContexts": ["Test"],
-      "publishProof": "npm package readback for @sylphx/pura plus changelog/version evidence."
+      "publisher": ".github/workflows/release.yml delegates to SylphxAI/.github reusable release workflow with inherited organization secrets and id-token: write.",
+      "requiredContexts": [
+        "Test"
+      ],
+      "publishProof": "Successful Release workflow plus npm package readback for @sylphx/pura and changelog/version evidence when package versions change."
     }
   },
   "commercial": {
@@ -116,20 +158,30 @@
     "decisionHome": "README.md and docs/guide/performance.md",
     "pricingSourceOfTruth": "not-applicable",
     "metricsSourceOfTruth": "benchmark reports and npm package readback",
-    "requiredRecords": ["market-positioning", "packaging", "roadmap"],
+    "requiredRecords": [
+      "market-positioning",
+      "packaging",
+      "roadmap"
+    ],
     "guardrails": [
       "Commercial positioning must be backed by benchmark and competitor evidence.",
       "Package claims must not exceed reproducible tests and benchmarks."
     ]
   },
   "adoption": {
-    "status": "baseline",
+    "status": "adopted",
     "gaps": [
       {
         "id": "package-release-proof",
         "description": "Package publication proof should include npm readback and benchmark context when performance claims change.",
         "owner": "SylphxAI/pura",
         "target": "before full package-release adoption"
+      },
+      {
+        "id": "lint-baseline",
+        "description": "Existing `bun run lint` / `biome check .` reports pre-existing formatting and import-order drift across benchmark/example/docs source. GroundAtlas CI preserves the current build/test required context and records lint cleanup as a separate package-quality slice before lint becomes required.",
+        "owner": "SylphxAI/pura",
+        "target": "dedicated Pura lint-baseline cleanup PR before making lint a required context"
       }
     ]
   }

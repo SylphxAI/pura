@@ -10,7 +10,8 @@ package under `@sylphx/pura`.
 - Lifecycle: `production`
 - Layer: `foundation`
 - Doctrine source of truth: [SylphxAI/doctrine](https://github.com/SylphxAI/doctrine)
-- Machine manifest: `.doctrine/project.json`
+- Vendor-neutral project manifest: [`project.manifest.json`](./project.manifest.json)
+- Sylphx Doctrine adapter: [`.doctrine/project.json`](./.doctrine/project.json)
 
 ## Goals
 
@@ -36,6 +37,4 @@ or runtime product decisions.
 
 ## Delivery
 
-PRs use the `Test` workflow context. Main release uses Changesets through
-`.github/workflows/release.yml`. Package publication is forward-fix only after
-npm release.
+PRs use the `Test` workflow context with `bun run validate`, project-control boundary tests, and GroundAtlas package dogfooding. Main release delegates to the shared Sylphx release workflow through `.github/workflows/release.yml`. Package publication is forward-fix only after npm readback. Generated `.groundatlas*` reports are evidence/navigation only, not source of truth. The current Biome/lint backlog is tracked as a separate adoption gap before lint becomes a required context.

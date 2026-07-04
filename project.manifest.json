@@ -1,0 +1,93 @@
+{
+  "$schema": "https://raw.githubusercontent.com/SylphxAI/groundatlas/main/schemas/project.manifest.schema.json",
+  "schemaVersion": 1,
+  "project": {
+    "id": "pura",
+    "name": "Pura",
+    "summary": "TypeScript immutable-update and persistent-data-structure library that returns native JavaScript types while providing fast immutable operations, benchmarks, docs, and the @sylphx/pura package.",
+    "lifecycle": "production",
+    "visibility": "open-source",
+    "repository": "https://github.com/SylphxAI/pura",
+    "homepage": "https://github.com/SylphxAI/pura",
+    "tags": ["typescript", "immutable", "persistent-data-structures", "functional", "library", "benchmarks"]
+  },
+  "truth": {
+    "humanProjectFile": "PROJECT.md",
+    "agentAdapter": "AGENTS.md",
+    "specs": ["docs/api/", "docs/guide/", "docs/specs/", "README.md", "PERFORMANCE.md", "BENCHMARKS.md"],
+    "adrs": ["docs/adr/", ".sylphx/decisions/"],
+    "source": ["packages/core/", "package.json", "tsconfig.json", "vitest.config.ts", ".github/workflows/ci.yml", ".github/workflows/release.yml"],
+    "tests": ["packages/core/", "test/project-control.node-test.mjs", ".github/workflows/ci.yml"],
+    "runbooks": ["README.md", "PROJECT.md", "AGENTS.md", "SECURITY.md"]
+  },
+  "surfaces": [
+    {
+      "type": "package",
+      "name": "@sylphx/pura",
+      "path": "packages/core/package.json",
+      "description": "Public package surface for Pura immutable update APIs and native-type return contract."
+    },
+    {
+      "type": "docs",
+      "name": "Repository README",
+      "path": "README.md",
+      "description": "Public overview, install, API, performance, and release-proof entry point."
+    },
+    {
+      "type": "docs",
+      "name": "Documentation site",
+      "path": "docs/",
+      "description": "VitePress docs, API reference, guides, examples, and migration documentation."
+    },
+    {
+      "type": "docs",
+      "name": "Benchmark evidence",
+      "path": "BENCHMARKS.md",
+      "description": "Benchmark methodology and performance-claim evidence."
+    },
+    {
+      "type": "workflow",
+      "name": "CI",
+      "path": ".github/workflows/ci.yml",
+      "description": "PR, merge-group, and main validation with build/test plus GroundAtlas package dogfood."
+    },
+    {
+      "type": "workflow",
+      "name": "Release",
+      "path": ".github/workflows/release.yml",
+      "description": "Main-branch release workflow calling the shared Sylphx release workflow."
+    },
+    {
+      "type": "docs",
+      "name": "Doctrine adapter manifest",
+      "path": ".doctrine/project.json",
+      "description": "Sylphx Doctrine adapter and org-local governance catalog; not the vendor-neutral GroundAtlas default."
+    }
+  ],
+  "commands": [
+    {
+      "name": "install",
+      "command": "bun install --frozen-lockfile",
+      "purpose": "Install workspace dependencies without lockfile drift."
+    },
+    {
+      "name": "validate",
+      "command": "bun run validate",
+      "purpose": "Run the current build and package test baseline used by CI."
+    },
+    {
+      "name": "test:project-control",
+      "command": "node --test test/project-control.node-test.mjs",
+      "purpose": "Verify neutral manifest, Doctrine adapter, released GroundAtlas workflow, and release caller boundary."
+    },
+    {
+      "name": "groundatlas:fleet",
+      "command": "npm exec --yes --package groundatlas@0.1.2 -- ga fleet . --out .groundatlas-pilot --require-atlas --strict --json",
+      "purpose": "Prove the vendor-neutral manifest is selected and generated GroundAtlas files are navigation-only."
+    }
+  ],
+  "adoption": {
+    "status": "adopted",
+    "notes": "Vendor-neutral GroundAtlas manifest for package/action dogfooding. .doctrine/project.json remains the Sylphx Doctrine adapter and local governance catalog. Generated .groundatlas* reports are evidence/navigation only, not source of truth. Existing lint baseline is tracked as a repo-local adoption gap and is not hidden by this gate."
+  }
+}
