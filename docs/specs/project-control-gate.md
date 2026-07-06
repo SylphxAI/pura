@@ -10,7 +10,7 @@ The gate validates repository control-plane facts only:
 
 - neutral identity and truth homes live in `project.manifest.json`;
 - Sylphx-specific governance facts remain in `.doctrine/project.json`;
-- generated `.groundatlas*` outputs are evidence/navigation only;
+- generated `.groundatlas*` files plus GroundAtlas JSON/Markdown reports are evidence/navigation only;
 - package validation for this slice is `bun run validate`, matching the current build and package test baseline;
 - the existing `bun run lint`/Biome backlog is tracked as an adoption gap and must be fixed in a dedicated package-quality slice before lint becomes a required context;
 - package release proof remains the Release workflow plus npm registry/readback when versions change.
@@ -25,9 +25,10 @@ It does not own downstream application state models, UI framework behavior, stor
 2. install dependencies with `bun install --frozen-lockfile`;
 3. run `bun run validate`;
 4. run `node --test test/project-control.node-test.mjs`;
-5. run `SylphxAI/groundatlas@v0.1.2` with `package-spec: groundatlas@0.1.2`, `require-atlas: "true"`, and `strict: "true"`;
+5. run `SylphxAI/groundatlas@v0.1.3` with `package-spec: groundatlas@0.1.3`, `require-atlas: "true"`, and `strict: "true"`;
 6. assert that GroundAtlas selects `project.manifest.json` and treats `.doctrine/project.json` only as an adapter;
-7. upload the manifest and fleet reports as `groundatlas-package-dogfood`.
+7. assert the Markdown fleet scorecard title and adopted summary;
+8. upload the manifest, JSON fleet, and Markdown fleet reports as `groundatlas-package-dogfood`.
 
 ## Acceptance
 
@@ -36,4 +37,5 @@ It does not own downstream application state models, UI framework behavior, stor
 - `ga audit` passes after `ga update`.
 - `ga manifest --json` selects `project.manifest.json`.
 - `ga fleet --require-atlas --strict --json` reports one adopted project with zero warnings and zero blockers.
+- the Markdown fleet report contains the adopted summary.
 - The release workflow delegates to `SylphxAI/.github/.github/workflows/release.yml@main` with `id-token: write`.
