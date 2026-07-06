@@ -41,4 +41,4 @@ benchmarks, docs, and npm release evidence.
 Docs-only boundary changes may be validated by diff review, referenced-file
 checks, and the central project manifest audit.
 
-Generated `.groundatlas*` reports are evidence/navigation only. Do not treat them as source of truth.
+Generated `.groundatlas*` files plus GroundAtlas JSON/Markdown reports are evidence/navigation only. Do not treat them as source of truth.

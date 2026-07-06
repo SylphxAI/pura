@@ -37,4 +37,4 @@ or runtime product decisions.
 
 ## Delivery
 
-PRs use the `Test` workflow context with `bun run validate`, project-control boundary tests, and GroundAtlas package dogfooding. Main release delegates to the shared Sylphx release workflow through `.github/workflows/release.yml`. Package publication is forward-fix only after npm readback. Generated `.groundatlas*` reports are evidence/navigation only, not source of truth. The current Biome/lint backlog is tracked as a separate adoption gap before lint becomes a required context.
+PRs use the `Test` workflow context with `bun run validate`, project-control boundary tests, and GroundAtlas package dogfooding. Main release delegates to the shared Sylphx release workflow through `.github/workflows/release.yml`. Package publication is forward-fix only after npm readback. Generated `.groundatlas*` files plus GroundAtlas JSON/Markdown reports are evidence/navigation only, not source of truth. The current Biome/lint backlog is tracked as a separate adoption gap before lint becomes a required context.
